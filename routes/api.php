@@ -79,6 +79,8 @@ Route::post('auth/login', [CustomAuthController::class, 'login']);
 
 Route::get('userfetch', [UserLoginController::class, 'FetchUser']);
 
+Route::get('/sensor-real-time/{dataCenterId}',[SensorListController::class, 'getSensorByDataCenter']);
+
 // Route::get('data-centers/mapping', [DataCenterController::class, 'getDataCenterMapping']);
 // Route::get('users/mapping', [UserRegisterController::class, 'getUserMapping']);
 // Route::get('partner/mapping', [MasterDataController::class, 'getPartnerMapping']);

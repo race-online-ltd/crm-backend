@@ -71,14 +71,14 @@ class DashboardDataController extends Controller
         if (!is_numeric($dataCenterId)) {
             return response()->json(['error' => 'Invalid data center ID'], 400);
         }
-        $thresholds = DB::connection('mysql')->select("SELECT sc.sensor_id, slt.id AS type_id, slt.name AS type_name, sc.value AS state_value, sc.name AS state_name, 
-                                        sl.location, sl.sensor_name, sc.color, dot.mode_id, dom.name AS mode_type, dot.repeat_id, dot.day_id, 
+        $thresholds = DB::connection('mysql')->select("SELECT sc.sensor_id,sc.path, slt.id AS type_id, slt.name AS type_name, sc.value AS state_value, sc.name AS state_name,
+                                        sl.location, sl.sensor_name, sc.color, dot.mode_id, dom.name AS mode_type, dot.repeat_id, dot.day_id,
                                         DATE_FORMAT(STR_TO_DATE(dot.on_time, '%H:%i'), '%h:%i %p') AS on_time,
                                         DATE_FORMAT(STR_TO_DATE(dot.off_time, '%H:%i'), '%h:%i %p') AS off_time,
                                             dot.duration AS runningDuration, dot.off_duration AS restDuration,
-                                        CASE 
-                                            WHEN pl.sensor_id IS NOT NULL THEN 1 
-                                            ELSE 0 
+                                        CASE
+                                            WHEN pl.sensor_id IS NOT NULL THEN 1
+                                            ELSE 0
                                         END AS paired_status, pg.group AS paired_sensors,
                                         (
                                             SELECT GROUP_CONCAT(s.name SEPARATOR ', ')

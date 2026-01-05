@@ -289,4 +289,29 @@ class SensorListController extends Controller
         ->get();
         return response()->json($sensors);
     }
+
+    public function getSensorByDataCenter($dataCenterId)
+    {
+        $data = DB::select(
+            "
+            SELECT v.sensor_id,v.value,s.data_center_id, s.sensor_type_list_id as sensor_type,
+                s.sensor_name,
+                s.location,
+                l.name AS sensor_type_name
+            FROM sensor_real_time_values v
+            JOIN sensor_lists s
+                ON v.sensor_id = s.id
+            JOIN sensor_type_lists l
+                ON s.sensor_type_list_id = l.id
+            WHERE s.data_center_id = ?
+            ORDER BY s.sensor_name
+            ",
+            [$dataCenterId]
+        );
+
+        return response()->json([
+            'success' => true,
+            'data' => $data
+        ]);
+    }
 }

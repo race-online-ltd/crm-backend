@@ -45,20 +45,50 @@ class DashboardDataController extends Controller
     }
 
 
+    // public function getSensorTypeByDataCenter($dataCenterId)
+    // {
+    //     // Validate the ID is numeric
+    //     if (!is_numeric($dataCenterId)) {
+    //         return response()->json(['error' => 'Invalid data center ID'], 400);
+    //     }
+
+    //     $sensorTypes = DB::connection('mysql')->select("SELECT stl.id sensor_type, stl.name sensor_type_name
+    //         FROM sensor_lists sl
+	// 		INNER JOIN data_center_creations dcc ON sl.data_center_id = dcc.id
+    //         INNER JOIN sensor_type_lists stl ON sl.sensor_type_list_id = stl.id
+    //         WHERE dcc.id IN ($dataCenterId)
+    //         AND sl.status = 1
+    //         GROUP BY stl.id,stl.name");
+
+    //     return response()->json($sensorTypes);
+    // }
+
+
     public function getSensorTypeByDataCenter($dataCenterId)
     {
-        // Validate the ID is numeric
-        if (!is_numeric($dataCenterId)) {
+        // Convert to array (handle single or multiple IDs)
+        $ids = is_array($dataCenterId)
+            ? $dataCenterId
+            : explode(',', $dataCenterId);
+
+        // Clean & validate IDs
+        $ids = array_filter($ids, function ($id) {
+            return is_numeric($id);
+        });
+
+        if (empty($ids)) {
             return response()->json(['error' => 'Invalid data center ID'], 400);
         }
 
-        $sensorTypes = DB::connection('mysql')->select("SELECT stl.id sensor_type, stl.name sensor_type_name
-            FROM sensor_lists sl
-			INNER JOIN data_center_creations dcc ON sl.data_center_id = dcc.id
-            INNER JOIN sensor_type_lists stl ON sl.sensor_type_list_id = stl.id
-            WHERE dcc.id IN ($dataCenterId)
-            AND sl.status = 1
-            GROUP BY stl.id,stl.name");
+        $sensorTypes = DB::connection('mysql')
+            ->table('sensor_lists as sl')
+            ->join('data_center_creations as dcc', 'sl.data_center_id', '=', 'dcc.id')
+            ->join('sensor_type_lists as stl', 'sl.sensor_type_list_id', '=', 'stl.id')
+            ->whereIn('dcc.id', $ids)
+            ->where('sl.status', 1)
+            ->select('stl.id as sensor_type', 'stl.name as sensor_type_name')
+            ->groupBy('stl.id', 'stl.name')
+            ->get();
 
         return response()->json($sensorTypes);
     }

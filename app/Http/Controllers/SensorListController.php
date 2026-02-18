@@ -437,7 +437,7 @@ class SensorListController extends Controller
     }
 
 
-    public function getOfflineSensorByDevice($dataCenterIds)
+    public function getOfflineDeviceBySensor($dataCenterIds)
     {
         try {
             $ids = explode(',', $dataCenterIds);

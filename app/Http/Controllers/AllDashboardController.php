@@ -95,7 +95,6 @@ class AllDashboardController extends Controller
                 ->join('sensor_real_time_values as stv', 'sl.id', '=', 'stv.sensor_id')
                 ->leftjoin('alarm_acknowledgements as aa', 'sl.id', '=', 'aa.sensor_id')
                 ->whereIn('sl.id', $sensorIds)
-                ->where('sl.data_center_id', $dataCenterId)
                 ->select([
                     'dc.name as Data_Center',
                     'dl.name as Device_Name',

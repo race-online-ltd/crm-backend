@@ -291,28 +291,103 @@ class SensorListController extends Controller
         return response()->json($sensors);
     }
 
-    public function getSensorByDataCenter($dataCenterId)
+    // public function getSensorByDataCenter($dataCenterId)
+    // {
+    //     $data = DB::select(
+    //         "
+    //         SELECT v.sensor_id,v.value,s.data_center_id, s.sensor_type_list_id as sensor_type,
+    //             s.sensor_name,
+    //             s.location,
+    //             l.name AS sensor_type_name
+    //         FROM sensor_real_time_values v
+    //         JOIN sensor_lists s
+    //             ON v.sensor_id = s.id
+    //         JOIN sensor_type_lists l
+    //             ON s.sensor_type_list_id = l.id
+    //         WHERE s.data_center_id = ?
+    //         ORDER BY s.sensor_name
+    //         ",
+    //         [$dataCenterId]
+    //     );
+
+    //     return response()->json([
+    //         'success' => true,
+    //         'data' => $data
+    //     ]);
+    // }
+
+    public function getSensorByDataCenter($dataCenterIds)
     {
-        $data = DB::select(
-            "
-            SELECT v.sensor_id,v.value,s.data_center_id, s.sensor_type_list_id as sensor_type,
+        try {
+            $ids = explode(',', $dataCenterIds);
+            $ids = array_map('intval', array_filter($ids));
+
+            if (empty($ids)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid data center IDs'
+                ], 400);
+            }
+
+            $data = DB::select(
+                "
+                SELECT 
+                    v.sensor_id,
+                    v.value,
+                    COALESCE(
+                        sc.name,
+                        CASE
+                            WHEN v.value >= MAX(CASE WHEN tv.threshold_type_id = 1 THEN tv.threshold END)
+                                THEN 'High'
+
+                            WHEN v.value >= MAX(CASE WHEN tv.threshold_type_id = 2 THEN tv.threshold END)
+                                THEN 'Normal'
+
+                            ELSE 'Low'
+                        END
+                    ) AS name,
+                    s.data_center_id,
+                    s.sensor_type_list_id as sensor_type,
+                    s.sensor_name,
+                    s.location,
+                    l.name AS sensor_type_name
+                FROM sensor_real_time_values v
+                JOIN sensor_lists s ON v.sensor_id = s.id
+
+                JOIN sensor_type_lists l ON s.sensor_type_list_id = l.id
+
+                LEFT JOIN state_configs sc ON v.sensor_id = sc.sensor_id AND v.value = sc.value
+
+                LEFT JOIN threshold_values tv  ON v.sensor_id = tv.sensor_id
+                WHERE s.data_center_id IN (" . implode(',', array_fill(0, count($ids), '?')) . ")
+                GROUP BY 
+                v.sensor_id,
+                v.value,
+                s.data_center_id,
+                s.sensor_type_list_id,
                 s.sensor_name,
                 s.location,
-                l.name AS sensor_type_name
-            FROM sensor_real_time_values v
-            JOIN sensor_lists s
-                ON v.sensor_id = s.id
-            JOIN sensor_type_lists l
-                ON s.sensor_type_list_id = l.id
-            WHERE s.data_center_id = ?
-            ORDER BY s.sensor_name
-            ",
-            [$dataCenterId]
-        );
+                sc.name,
+                l.name
+                ORDER BY s.data_center_id, s.sensor_name
+                ",
+                $ids
+            );
 
-        return response()->json([
-            'success' => true,
-            'data' => $data
-        ]);
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'count' => count($data)
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching sensor real-time data: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch sensor real-time data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

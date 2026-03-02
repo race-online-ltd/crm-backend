@@ -20,6 +20,8 @@ return new class extends Migration
             $table->string('attache_sound', 255)->nullable();
             $table->string('url', 255)->nullable();
             $table->string('color', 50)->nullable();
+            $table->boolean('sound')->nullable();
+            $table->boolean('blink')->nullable();
             $table->timestamps();
         });
     }

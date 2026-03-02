@@ -29,6 +29,8 @@ class StateConfigController extends Controller
             'attache_sound' => 'nullable|string|max:255',
             'url' => 'nullable|string|max:255',
             'color' => 'nullable|string|max:50',
+            'sound' => 'nullable|boolean',
+            'blink' => 'nullable|boolean',
         ]);
 
         $stateConfig = StateConfig::create($validated);

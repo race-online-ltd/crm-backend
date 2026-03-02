@@ -18,7 +18,9 @@ class StateConfig extends Model
         'name',
         'attache_sound',
         'url',
-        'color'
+        'color',
+        'sound',
+        'blink'
     ];
 
 //    protected $casts = [

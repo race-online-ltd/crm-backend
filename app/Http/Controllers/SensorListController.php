@@ -98,34 +98,29 @@ class SensorListController extends Controller
             $sensorList = SensorList::create($validated);
 
             // Check if sensor type is Water (4) or Smoke (5)
-            if (in_array($validated['sensor_type_list_id'], [3, 4, 5])) {
+            if (in_array($validated['sensor_type_list_id'], [3, 4, 5, 6])) {
                 switch ($validated['sensor_type_list_id']) {
                     case 3:
                         $stateConfigs = [
                             [
                                 'value' => 0,
-                                'name' => 'Normal',
+                                'name' => 'Alarm',
                                 'attache_sound' => null,
                                 'url' => null,
-                                'color' => '#00ff2a',
+                                'color' => '#ff0000',
+                                'sound' => 1,
+                                'blink' => 1,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ],
                             [
                                 'value' => 1,
-                                'name' => 'Warning',
+                                'name' => 'Normal',
                                 'attache_sound' => null,
                                 'url' => null,
-                                'color' => '#cbc401',
-                                'created_at' => now(),
-                                'updated_at' => now()
-                            ],
-                            [
-                                'value' => 3,
-                                'name' => 'Fault',
-                                'attache_sound' => null,
-                                'url' => null,
-                                'color' => '#9c9c9c',
+                                'color' => '#00ff00',
+                                'sound' => 0,
+                                'blink' => 0,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ]
@@ -139,7 +134,9 @@ class SensorListController extends Controller
                                 'name' => 'Normal',
                                 'attache_sound' => null,
                                 'url' => null,
-                                'color' => '#00ff2a',
+                                'color' => '#00ff00',
+                                'sound' => 0,
+                                'blink' => 0,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ],
@@ -148,7 +145,9 @@ class SensorListController extends Controller
                                 'name' => 'Warning',
                                 'attache_sound' => null,
                                 'url' => null,
-                                'color' => '#cbc401',
+                                'color' => '#ffff00',
+                                'sound' => 0,
+                                'blink' => 1,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ],
@@ -157,16 +156,20 @@ class SensorListController extends Controller
                                 'name' => 'Leaking',
                                 'attache_sound' => null,
                                 'url' => null,
-                                'color' => '#ff3300',
+                                'color' => '#ff0000',
+                                'sound' => 1,
+                                'blink' => 1,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ],
                             [
                                 'value' => 3,
-                                'name' => 'OverFlow',
+                                'name' => 'Fault',
                                 'attache_sound' => null,
                                 'url' => null,
                                 'color' => '#9c9c9c',
+                                'sound' => 1,
+                                'blink' => 1,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ]
@@ -180,16 +183,47 @@ class SensorListController extends Controller
                                 'name' => 'Normal',
                                 'attache_sound' => null,
                                 'url' => null,
-                                'color' => '#00ff2a',
+                                'color' => '#00ff00',
+                                'sound' => 0,
+                                'blink' => 0,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ],
                             [
                                 'value' => 1,
-                                'name' => 'Warning',
+                                'name' => 'Alarm',
                                 'attache_sound' => null,
                                 'url' => null,
-                                'color' => '#cbc401',
+                                'color' => '#ff0000',
+                                'sound' => 1,
+                                'blink' => 1,
+                                'created_at' => now(),
+                                'updated_at' => now()
+                            ]
+                        ];
+                        break;
+
+                    case 6:
+                        $stateConfigs = [
+                            [
+                                'value' => 0,
+                                'name' => 'Close',
+                                'attache_sound' => null,
+                                'url' => null,
+                                'color' => '#00ff00',
+                                'sound' => 0,
+                                'blink' => 0,
+                                'created_at' => now(),
+                                'updated_at' => now()
+                            ],
+                            [
+                                'value' => 1,
+                                'name' => 'Open',
+                                'attache_sound' => null,
+                                'url' => null,
+                                'color' => '#ff0000',
+                                'sound' => 0,
+                                'blink' => 1,
                                 'created_at' => now(),
                                 'updated_at' => now()
                             ]

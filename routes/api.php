@@ -391,6 +391,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 Route::prefix('alarm')->group(function () {
     Route::post('/sensor-details', [AllDashboardController::class, 'getrDataCenterAlarmDetails']);
     Route::post('/store', [AlarmDetailsController::class, 'acknowledgementStore']);
+    Route::post('/acknowledge', [AlarmDetailsController::class, 'syncAndCountAcknowledgements']);
 
 
 });

@@ -55,15 +55,15 @@ return new class extends Migration
                 id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 sensor_id BIGINT UNSIGNED NOT NULL,
                 value VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NULL DEFAULT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NULL,
                 PRIMARY KEY (id, created_at),
                 INDEX idx_sensor_created (sensor_id, created_at)
             )
-            PARTITION BY RANGE (YEAR(created_at)*100 + MONTH(created_at)) (
-                PARTITION p202603 VALUES LESS THAN (202604),
-                PARTITION p202604 VALUES LESS THAN (202605),
-                PARTITION p202605 VALUES LESS THAN (202606)
+            PARTITION BY RANGE (TO_DAYS(created_at)) (
+                PARTITION p202603 VALUES LESS THAN (TO_DAYS('2026-04-01')),
+                PARTITION p202604 VALUES LESS THAN (TO_DAYS('2026-05-01')),
+                PARTITION p202605 VALUES LESS THAN (TO_DAYS('2026-06-01'))
             );
         ");
     }

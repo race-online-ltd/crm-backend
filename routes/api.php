@@ -393,10 +393,11 @@ Route::prefix('alarm')->group(function () {
     Route::post('/sensor-details', [AllDashboardController::class, 'getrDataCenterAlarmDetails']);
     Route::post('/store', [AlarmDetailsController::class, 'acknowledgementStore']);
     Route::post('/acknowledge', [AlarmDetailsController::class, 'syncAndCountAcknowledgements']);
+    Route::post('/sensor-fault/store', [AlarmDetailsController::class, 'storeSensorFault']);
+    Route::get('/report', [AlarmDetailsController::class, 'alarmLogs']);
 
 
 });
-
 
 
 

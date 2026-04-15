@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\StoreSystemUserRequest;
+use App\Http\Requests\Settings\UpdateSystemUserRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class SystemUserController extends Controller
 {
@@ -24,15 +24,15 @@ class SystemUserController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreSystemUserRequest $request): JsonResponse
     {
-        $validated = $request->validate($this->rules());
+        $validated = $request->validated();
 
         $user = User::create([
-            'full_name' => trim($validated['full_name']),
-            'user_name' => trim($validated['user_name']),
-            'email' => strtolower(trim($validated['email'])),
-            'phone' => trim($validated['phone']),
+            'full_name' => $validated['full_name'],
+            'user_name' => $validated['user_name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'],
             'password' => $validated['password'],
             'role_id' => $validated['role_id'],
             'status' => $validated['status'] ?? true,
@@ -44,15 +44,15 @@ class SystemUserController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, User $systemUser): JsonResponse
+    public function update(UpdateSystemUserRequest $request, User $systemUser): JsonResponse
     {
-        $validated = $request->validate($this->rules($systemUser->id, true));
+        $validated = $request->validated();
 
         $payload = [
-            'full_name' => trim($validated['full_name']),
-            'user_name' => trim($validated['user_name']),
-            'email' => strtolower(trim($validated['email'])),
-            'phone' => trim($validated['phone']),
+            'full_name' => $validated['full_name'],
+            'user_name' => $validated['user_name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'],
             'role_id' => $validated['role_id'],
             'status' => $validated['status'] ?? $systemUser->status,
         ];
@@ -67,23 +67,6 @@ class SystemUserController extends Controller
             'message' => 'System user updated successfully.',
             'data' => $this->transformUser($systemUser->fresh()),
         ]);
-    }
-
-    private function rules(?int $userId = null, bool $isUpdate = false): array
-    {
-        $passwordRules = $isUpdate
-            ? ['nullable', 'string', 'min:6', 'regex:/[a-z]/', 'regex:/[A-Z]/', 'regex:/\d/', 'regex:/[^A-Za-z0-9]/']
-            : ['required', 'string', 'min:6', 'regex:/[a-z]/', 'regex:/[A-Z]/', 'regex:/\d/', 'regex:/[^A-Za-z0-9]/'];
-
-        return [
-            'full_name' => ['required', 'string', 'max:255'],
-            'user_name' => ['required', 'string', 'max:255', Rule::unique('users', 'user_name')->ignore($userId)],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
-            'phone' => ['required', 'string', 'min:10', 'max:13', 'regex:/^\d+$/'],
-            'password' => $passwordRules,
-            'role_id' => ['required', 'integer', Rule::exists('role_table', 'id')],
-            'status' => ['sometimes', 'boolean'],
-        ];
     }
 
     private function transformUser(User $user): array

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Tymon\JWTAuth\Exceptions\JWTException;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
@@ -74,6 +75,35 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Logged out successfully.',
+        ]);
+    }
+
+    public function refresh(): JsonResponse
+    {
+        try {
+            $newToken = JWTAuth::parseToken()->refresh();
+        } catch (JWTException $exception) {
+            return response()->json([
+                'message' => 'Token could not be refreshed.',
+            ], 401);
+        }
+
+        $user = JWTAuth::setToken($newToken)->toUser();
+
+        if (!$user || !$user->status) {
+            return response()->json([
+                'message' => 'Your account is inactive.',
+            ], 403);
+        }
+
+        return response()->json([
+            'message' => 'Token refreshed successfully.',
+            'data' => [
+                'token' => $newToken,
+                'token_type' => 'bearer',
+                'expires_in' => JWTAuth::factory()->getTTL() * 60,
+                'user' => $this->transformUser($user),
+            ],
         ]);
     }
 

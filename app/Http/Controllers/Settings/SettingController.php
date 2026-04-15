@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\ListSystemUsersRequest;
 use App\Http\Requests\Settings\StoreRoleRequest;
 use App\Http\Requests\Settings\StoreSystemUserRequest;
 use App\Http\Requests\Settings\UpdateRoleRequest;
 use App\Http\Requests\Settings\UpdateSystemUserRequest;
 use App\Models\Role;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 
@@ -71,17 +73,40 @@ class SettingController extends Controller
         ]);
     }
 
-    public function usersIndex(): JsonResponse
+    public function usersIndex(ListSystemUsersRequest $request): JsonResponse
     {
+        $validated = $request->validated();
+        $search = $validated['search'] ?? null;
+        $roleId = $validated['role_id'] ?? null;
+        $perPage = $validated['per_page'] ?? 10;
+
         $users = User::query()
+            ->when($search, function (Builder $query, string $searchTerm): void {
+                $query->where(function (Builder $innerQuery) use ($searchTerm): void {
+                    $innerQuery
+                        ->where('full_name', 'like', "%{$searchTerm}%")
+                        ->orWhere('user_name', 'like', "%{$searchTerm}%")
+                        ->orWhere('email', 'like', "%{$searchTerm}%");
+                });
+            })
+            ->when($roleId, fn (Builder $query, int $selectedRoleId) => $query->where('role_id', $selectedRoleId))
             ->latest()
-            ->get()
-            ->map(fn (User $user) => $this->transformUser($user))
-            ->values();
+            ->paginate($perPage)
+            ->withQueryString();
 
         return response()->json([
             'message' => 'System users fetched successfully.',
-            'data' => $users,
+            'data' => $users->getCollection()
+                ->map(fn (User $user) => $this->transformUser($user))
+                ->values(),
+            'meta' => [
+                'current_page' => $users->currentPage(),
+                'last_page' => $users->lastPage(),
+                'per_page' => $users->perPage(),
+                'total' => $users->total(),
+                'from' => $users->firstItem(),
+                'to' => $users->lastItem(),
+            ],
         ]);
     }
 

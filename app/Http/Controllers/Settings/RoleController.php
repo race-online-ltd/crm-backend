@@ -3,10 +3,9 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\StoreRoleRequest;
 use App\Models\Role;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class RoleController extends Controller
 {
@@ -30,19 +29,12 @@ class RoleController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreRoleRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('role_table', 'name'),
-            ],
-        ]);
+        $validated = $request->validated();
 
         $role = Role::create([
-            'name' => trim($validated['name']),
+            'name' => $validated['name'],
         ]);
 
         return response()->json([

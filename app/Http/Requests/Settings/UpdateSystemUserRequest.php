@@ -43,7 +43,7 @@ class UpdateSystemUserRequest extends FormRequest
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
             'phone' => ['required', 'string', 'min:10', 'max:13', 'regex:/^\d+$/'],
             'password' => ['nullable', 'string', 'min:6', 'regex:/[a-z]/', 'regex:/[A-Z]/', 'regex:/\d/', 'regex:/[^A-Za-z0-9]/'],
-            'role_id' => ['required', 'integer', Rule::exists('role_table', 'id')],
+            'role_id' => ['required', 'integer', Rule::exists('role', 'id')],
             'status' => ['sometimes', 'boolean'],
         ];
     }

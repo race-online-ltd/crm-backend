@@ -41,6 +41,7 @@ Route::middleware('auth:api')->group(function (): void {
 
     Route::prefix('system')->controller(RoleController::class)->group(function (): void {
         Route::get('/roles/{role}/permissions', 'rolePermission');
+        Route::post('/roles/{role}/update-permissions', 'updateRolePermissions');
     });
 
     Route::prefix('system')->group(function (): void {

@@ -10,6 +10,7 @@ use App\Models\TeamKamMapping;
 use App\Models\TeamSupervisorMapping;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -137,6 +138,9 @@ class TeamController extends Controller
 
     private function syncMappings(Team $team, array $supervisorIds, array $kamIds): void
     {
+        $supervisorIds = $this->normalizeIds($supervisorIds);
+        $kamIds = $this->normalizeIds($kamIds);
+
         TeamSupervisorMapping::query()
             ->where('team_id', $team->id)
             ->delete();
@@ -163,12 +167,10 @@ class TeamController extends Controller
     private function transformTeam(Team $team): array
     {
         $teamName = $team->team_name ?? $team->name ?? '';
-        $supervisorIds = $this->usesNormalizedSchema()
-            ? $team->supervisorMappings->pluck('supervisor_id')->values()
-            : $this->normalizeLegacyIds($team->supervisor_id ?? []);
-        $kamIds = $this->usesNormalizedSchema()
-            ? $team->kamMappings->pluck('kam_id')->values()
-            : $this->normalizeLegacyIds($team->kam_id ?? []);
+        $supervisorIds = $this->resolveTeamSupervisorIds($team);
+        $kamIds = $this->resolveTeamKamIds($team);
+        $supervisors = $this->resolveSupervisorOptions($team, $supervisorIds);
+        $kams = $this->resolveKamOptions($team, $kamIds);
 
         return [
             'id' => $team->id,
@@ -177,18 +179,10 @@ class TeamController extends Controller
             'status' => (bool) $team->status,
             'supervisor_id' => $supervisorIds,
             'kam_id' => $kamIds,
-            'supervisors' => $this->usesNormalizedSchema()
-                ? $team->supervisorMappings
-                    ->map(fn (TeamSupervisorMapping $mapping) => $this->transformUserOption($mapping->supervisor))
-                    ->filter()
-                    ->values()
-                : collect($supervisorIds)->map(fn ($id) => ['id' => $id, 'label' => (string) $id])->values(),
-            'kams' => $this->usesNormalizedSchema()
-                ? $team->kamMappings
-                    ->map(fn (TeamKamMapping $mapping) => $this->transformUserOption($mapping->kam))
-                    ->filter()
-                    ->values()
-                : collect($kamIds)->map(fn ($id) => ['id' => $id, 'label' => (string) $id])->values(),
+            'supervisors' => $supervisors,
+            'kams' => $kams,
+            'supervisor_name' => $supervisors->pluck('label')->filter()->join(', '),
+            'kam_name' => $kams->pluck('label')->filter()->join(', '),
             'created_at' => $team->created_at,
             'updated_at' => $team->updated_at,
             'deleted_at' => $team->deleted_at ?? null,
@@ -201,13 +195,148 @@ class TeamController extends Controller
             return array_values($value);
         }
 
+        if (is_int($value)) {
+            return [$value];
+        }
+
         if (is_string($value) && $value !== '') {
             $decoded = json_decode($value, true);
 
-            return is_array($decoded) ? array_values($decoded) : [];
+            if (is_array($decoded)) {
+                return array_values(array_map('intval', $decoded));
+            }
+
+            if (is_numeric($value)) {
+                return [(int) $value];
+            }
         }
 
         return [];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function normalizeIds(mixed $value): array
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        $items = is_array($value) ? $value : [$value];
+
+        return array_values(array_map(
+            'intval',
+            array_filter($items, static fn ($item) => $item !== null && $item !== '')
+        ));
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function resolveTeamSupervisorIds(Team $team): array
+    {
+        $ids = collect();
+
+        if ($this->usesNormalizedSchema()) {
+            $ids = $ids->merge($team->supervisorMappings->pluck('supervisor_id')->all());
+        }
+
+        return $ids
+            ->merge($this->normalizeLegacyIds($team->supervisor_id ?? []))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function resolveTeamKamIds(Team $team): array
+    {
+        $ids = collect();
+
+        if ($this->usesNormalizedSchema()) {
+            $ids = $ids->merge($team->kamMappings->pluck('kam_id')->all());
+        }
+
+        return $ids
+            ->merge($this->normalizeLegacyIds($team->kam_id ?? []))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function resolveSupervisorOptions(Team $team, array $supervisorIds): Collection
+    {
+        $options = collect();
+
+        if ($this->usesNormalizedSchema()) {
+            $options = $team->supervisorMappings
+                ->map(fn (TeamSupervisorMapping $mapping) => $this->transformUserOption($mapping->supervisor))
+                ->filter();
+        }
+
+        if (empty($supervisorIds)) {
+            return $options->values();
+        }
+
+        $knownIds = $options->pluck('id')->all();
+        $missingIds = array_values(array_diff($supervisorIds, $knownIds));
+
+        if ($missingIds === []) {
+            return $options->values();
+        }
+
+        $legacyUsers = User::query()
+            ->with('role')
+            ->whereIn('id', $missingIds)
+            ->get()
+            ->map(fn (User $user) => $this->transformUserOption($user))
+            ->filter();
+
+        return $options
+            ->concat($legacyUsers)
+            ->unique('id')
+            ->values();
+    }
+
+    private function resolveKamOptions(Team $team, array $kamIds): Collection
+    {
+        $options = collect();
+
+        if ($this->usesNormalizedSchema()) {
+            $options = $team->kamMappings
+                ->map(fn (TeamKamMapping $mapping) => $this->transformUserOption($mapping->kam))
+                ->filter();
+        }
+
+        if (empty($kamIds)) {
+            return $options->values();
+        }
+
+        $knownIds = $options->pluck('id')->all();
+        $missingIds = array_values(array_diff($kamIds, $knownIds));
+
+        if ($missingIds === []) {
+            return $options->values();
+        }
+
+        $legacyUsers = User::query()
+            ->with('role')
+            ->whereIn('id', $missingIds)
+            ->get()
+            ->map(fn (User $user) => $this->transformUserOption($user))
+            ->filter();
+
+        return $options
+            ->concat($legacyUsers)
+            ->unique('id')
+            ->values();
     }
 
     private function usesNormalizedSchema(): bool

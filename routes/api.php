@@ -3,7 +3,7 @@
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\Settings\BusinessEntityController;
-use App\Http\Controllers\Settings\GroupController;
+use App\Http\Controllers\GroupControllers\GroupController;
 use App\Http\Controllers\Settings\SettingController;
 use App\Http\Controllers\TeamControllers\TeamController;
 use Illuminate\Support\Facades\Route;

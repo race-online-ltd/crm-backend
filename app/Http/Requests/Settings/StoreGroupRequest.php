@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Settings;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreGroupRequest extends FormRequest
 {
@@ -15,15 +16,18 @@ class StoreGroupRequest extends FormRequest
     {
         $payload = [];
 
-        if ($this->has('name')) {
-            $payload['name'] = trim((string) $this->input('name'));
+        if ($this->has('group_name')) {
+            $payload['group_name'] = trim((string) $this->input('group_name'));
         }
 
         foreach (['supervisor_id', 'team_id'] as $field) {
             if ($this->has($field)) {
-                $payload[$field] = array_values(array_filter(
-                    (array) $this->input($field),
-                    static fn ($value) => $value !== null && $value !== ''
+                $payload[$field] = array_values(array_map(
+                    'intval',
+                    array_filter(
+                        (array) $this->input($field),
+                        static fn ($value) => $value !== null && $value !== ''
+                    )
                 ));
             }
         }
@@ -36,11 +40,11 @@ class StoreGroupRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
+            'group_name' => ['required', 'string', 'max:255'],
             'supervisor_id' => ['required', 'array', 'min:1'],
-            'supervisor_id.*' => ['required', 'string', 'max:255'],
+            'supervisor_id.*' => ['required', 'integer', 'distinct', Rule::exists('users', 'id')],
             'team_id' => ['required', 'array', 'min:1'],
-            'team_id.*' => ['required', 'string', 'max:255'],
+            'team_id.*' => ['required', 'integer', 'distinct', Rule::exists('teams', 'id')],
             'status' => ['sometimes', 'boolean'],
         ];
     }

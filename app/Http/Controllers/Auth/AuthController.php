@@ -18,7 +18,6 @@ class AuthController extends Controller
         $password = $validated['password'];
 
         $user = User::query()
-            ->with('role:id,name')
             ->where('email', $login)
             ->orWhere('user_name', $login)
             ->first();
@@ -64,7 +63,7 @@ class AuthController extends Controller
                 'token' => $token,
                 'token_type' => 'bearer',
                 'expires_in' => JWTAuth::factory()->getTTL() * 60,
-                'user' => $this->transformUser(auth('api')->user() ?? $user),
+                'user' => $this->transformUser((auth('api')->user() ?? $user)->load('role')),
             ],
         ]);
     }
@@ -102,7 +101,7 @@ class AuthController extends Controller
                 'token' => $newToken,
                 'token_type' => 'bearer',
                 'expires_in' => JWTAuth::factory()->getTTL() * 60,
-                'user' => $this->transformUser($user),
+                'user' => $this->transformUser($user->load('role')),
             ],
         ]);
     }
@@ -114,7 +113,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'User fetched successfully.',
             'data' => [
-                'user' => $this->transformUser($user),
+                'user' => $this->transformUser($user->load('role')),
             ],
         ]);
     }

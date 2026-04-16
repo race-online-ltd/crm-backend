@@ -18,7 +18,7 @@ class ProfileController extends Controller
         return response()->json([
             'message' => 'Profile fetched successfully.',
             'data' => [
-                'user' => $this->transformUser($user),
+                'user' => $this->transformUser($user->load('role')),
             ],
         ]);
     }
@@ -37,7 +37,7 @@ class ProfileController extends Controller
         return response()->json([
             'message' => 'Profile updated successfully.',
             'data' => [
-                'user' => $this->transformUser($user->fresh('role:id,name')),
+                'user' => $this->transformUser($user->fresh()->load('role')),
             ],
         ]);
     }

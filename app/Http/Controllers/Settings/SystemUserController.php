@@ -13,6 +13,7 @@ class SystemUserController extends Controller
     public function index(): JsonResponse
     {
         $users = User::query()
+            ->with('role')
             ->latest()
             ->get()
             ->map(fn (User $user) => $this->transformUser($user))
@@ -40,7 +41,7 @@ class SystemUserController extends Controller
 
         return response()->json([
             'message' => 'System user created successfully.',
-            'data' => $this->transformUser($user->fresh()),
+            'data' => $this->transformUser($user->fresh()->load('role')),
         ], 201);
     }
 
@@ -65,7 +66,7 @@ class SystemUserController extends Controller
 
         return response()->json([
             'message' => 'System user updated successfully.',
-            'data' => $this->transformUser($systemUser->fresh()),
+            'data' => $this->transformUser($systemUser->fresh()->load('role')),
         ]);
     }
 

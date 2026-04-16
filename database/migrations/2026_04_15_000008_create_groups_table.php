@@ -10,10 +10,9 @@ return new class extends Migration
     {
         Schema::create('groups', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->json('supervisor_id')->nullable();
-            $table->json('team_id')->nullable();
+            $table->string('group_name');
             $table->boolean('status')->default(true);
+            $table->softDeletes();
             $table->timestamps();
         });
     }

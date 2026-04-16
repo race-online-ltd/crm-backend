@@ -2,11 +2,11 @@
 
 namespace App\Http\Requests\Settings;
 
-use App\Models\Role;
+use App\Models\BusinessEntity;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class UpdateRoleRequest extends FormRequest
+class UpdateBusinessEntityRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -24,16 +24,17 @@ class UpdateRoleRequest extends FormRequest
 
     public function rules(): array
     {
-        $role = $this->route('role');
-        $roleId = $role instanceof Role ? $role->id : $role;
+        $businessEntity = $this->route('businessEntity');
+        $businessEntityId = $businessEntity instanceof BusinessEntity ? $businessEntity->id : $businessEntity;
 
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('roles', 'name')->ignore($roleId),
+                Rule::unique('business_entities', 'name')->ignore($businessEntityId),
             ],
+            'status' => ['sometimes', 'boolean'],
         ];
     }
 }

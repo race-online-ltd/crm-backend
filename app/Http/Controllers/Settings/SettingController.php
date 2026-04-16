@@ -81,6 +81,7 @@ class SettingController extends Controller
         $perPage = $validated['per_page'] ?? 10;
 
         $users = User::query()
+            ->with('role')
             ->when($search, function (Builder $query, string $searchTerm): void {
                 $query->where(function (Builder $innerQuery) use ($searchTerm): void {
                     $innerQuery
@@ -126,7 +127,7 @@ class SettingController extends Controller
 
         return response()->json([
             'message' => 'System user created successfully.',
-            'data' => $this->transformUser($user->fresh()),
+            'data' => $this->transformUser($user->fresh()->load('role')),
         ], 201);
     }
 
@@ -151,7 +152,7 @@ class SettingController extends Controller
 
         return response()->json([
             'message' => 'System user updated successfully.',
-            'data' => $this->transformUser($systemUser->fresh()),
+            'data' => $this->transformUser($systemUser->fresh()->load('role')),
         ]);
     }
 

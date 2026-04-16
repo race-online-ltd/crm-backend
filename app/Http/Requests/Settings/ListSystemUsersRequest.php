@@ -41,7 +41,7 @@ class ListSystemUsersRequest extends FormRequest
     {
         return [
             'search' => ['nullable', 'string', 'max:255'],
-            'role_id' => ['nullable', 'integer', Rule::exists('role', 'id')],
+            'role_id' => ['nullable', 'integer', Rule::exists('roles', 'id')],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];

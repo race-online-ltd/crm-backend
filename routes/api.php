@@ -2,7 +2,10 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\ProfileController;
+use App\Http\Controllers\Settings\BusinessEntityController;
+use App\Http\Controllers\Settings\GroupController;
 use App\Http\Controllers\Settings\SettingController;
+use App\Http\Controllers\TeamControllers\TeamController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -32,5 +35,25 @@ Route::middleware('auth:api')->group(function (): void {
         Route::put('/users/{systemUser}', 'updateUser');
         Route::patch('/users/{systemUser}', 'updateUser');
         Route::delete('/users/{systemUser}', 'destroyUser');
+    });
+
+    Route::prefix('system')->group(function (): void {
+        Route::get('/business-entities', [BusinessEntityController::class, 'index']);
+        Route::post('/business-entities', [BusinessEntityController::class, 'store']);
+        Route::put('/business-entities/{businessEntity}', [BusinessEntityController::class, 'update']);
+        Route::patch('/business-entities/{businessEntity}', [BusinessEntityController::class, 'update']);
+        Route::delete('/business-entities/{businessEntity}', [BusinessEntityController::class, 'destroy']);
+
+        Route::get('/teams', [TeamController::class, 'index']);
+        Route::post('/teams', [TeamController::class, 'store']);
+        Route::put('/teams/{team}', [TeamController::class, 'update']);
+        Route::patch('/teams/{team}', [TeamController::class, 'update']);
+        Route::delete('/teams/{team}', [TeamController::class, 'destroy']);
+
+        Route::get('/groups', [GroupController::class, 'index']);
+        Route::post('/groups', [GroupController::class, 'store']);
+        Route::put('/groups/{group}', [GroupController::class, 'update']);
+        Route::patch('/groups/{group}', [GroupController::class, 'update']);
+        Route::delete('/groups/{group}', [GroupController::class, 'destroy']);
     });
 });

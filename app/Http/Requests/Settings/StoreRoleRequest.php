@@ -28,7 +28,7 @@ class StoreRoleRequest extends FormRequest
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('role', 'name'),
+                Rule::unique('roles', 'name'),
             ],
         ];
     }

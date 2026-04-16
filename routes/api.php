@@ -7,6 +7,7 @@ use App\Http\Controllers\GroupControllers\GroupController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\SettingController;
 use App\Http\Controllers\TeamControllers\TeamController;
+use App\Http\Controllers\EntityColumnMappingController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -38,6 +39,24 @@ Route::middleware('auth:api')->group(function (): void {
         Route::patch('/users/{systemUser}', 'updateUser');
         Route::delete('/users/{systemUser}', 'destroyUser');
     });
+
+    
+
+Route::prefix('entity-column-mappings')->group(function () {
+
+    Route::get('/get-navigation-items', [EntityColumnMappingController::class, 'getNavigationItems']);
+    Route::get('/get-table-items', [EntityColumnMappingController::class, 'getTableItems']);
+    Route::get('/get-column-items', [EntityColumnMappingController::class, 'getColumnItems']);
+
+
+    Route::get('/', [EntityColumnMappingController::class, 'index']);
+    Route::post('/', [EntityColumnMappingController::class, 'store']);
+    Route::get('/{id}', [EntityColumnMappingController::class, 'show']);
+    Route::put('/{id}', [EntityColumnMappingController::class, 'update']);
+    Route::delete('/{id}', [EntityColumnMappingController::class, 'destroy']);
+    
+
+});
 
     Route::prefix('system')->controller(RoleController::class)->group(function (): void {
         Route::get('/roles/{role}/permissions', 'rolePermission');

@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\Settings\BusinessEntityController;
 use App\Http\Controllers\GroupControllers\GroupController;
+use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\SettingController;
 use App\Http\Controllers\TeamControllers\TeamController;
 use Illuminate\Support\Facades\Route;
@@ -25,6 +26,7 @@ Route::middleware('auth:api')->group(function (): void {
 
     Route::prefix('system')->controller(SettingController::class)->group(function (): void {
         Route::get('/roles', 'rolesIndex');
+        Route::get('/access-control', 'accessControlIndex');
         Route::post('/roles', 'storeRole');
         Route::put('/roles/{role}', 'updateRole');
         Route::patch('/roles/{role}', 'updateRole');
@@ -35,6 +37,10 @@ Route::middleware('auth:api')->group(function (): void {
         Route::put('/users/{systemUser}', 'updateUser');
         Route::patch('/users/{systemUser}', 'updateUser');
         Route::delete('/users/{systemUser}', 'destroyUser');
+    });
+
+    Route::prefix('system')->controller(RoleController::class)->group(function (): void {
+        Route::get('/roles/{role}/permissions', 'rolePermission');
     });
 
     Route::prefix('system')->group(function (): void {

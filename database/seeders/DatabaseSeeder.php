@@ -31,5 +31,13 @@ class DatabaseSeeder extends Seeder
                 'status' => true,
             ]
         );
+
+        $this->call([
+            CrmRoleSeeder::class,
+            PermissionActionSeeder::class,
+            NavigationItemSeeder::class,
+            NavigationPermissionSeeder::class,
+            RolePermissionSeeder::class,
+        ]);
     }
 }

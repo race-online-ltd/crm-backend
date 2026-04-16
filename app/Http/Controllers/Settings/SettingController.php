@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\ListRolePermissionsRequest;
 use App\Http\Requests\Settings\ListSystemUsersRequest;
+use App\Models\NavigationItem;
+use App\Models\RolePermission;
 use App\Http\Requests\Settings\StoreRoleRequest;
 use App\Http\Requests\Settings\StoreSystemUserRequest;
 use App\Http\Requests\Settings\UpdateRoleRequest;
@@ -111,6 +114,70 @@ class SettingController extends Controller
         ]);
     }
 
+    public function accessControlIndex(ListRolePermissionsRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+        $search = $validated['search'] ?? null;
+        $roleId = $validated['role_id'] ?? null;
+
+        $roles = Role::query()
+            ->orderBy('name')
+            ->get()
+            ->map(fn (Role $role) => $this->transformRole($role))
+            ->values();
+
+        $selectedRole = $roleId ? Role::query()->find($roleId) : null;
+
+        $selectedPermissionIds = $roleId
+            ? RolePermission::query()
+                ->where('role_id', $roleId)
+                ->pluck('navigation_permission_id')
+                ->all()
+            : [];
+
+        $navigationItems = NavigationItem::query()
+            ->with([
+                'parent:id,label',
+                'navigationPermissions.permissionAction:id,key,label',
+            ])
+            ->when($search, function (Builder $query, string $searchTerm): void {
+                $query->where(function (Builder $innerQuery) use ($searchTerm): void {
+                    $innerQuery
+                        ->where('label', 'like', "%{$searchTerm}%")
+                        ->orWhere('key', 'like', "%{$searchTerm}%")
+                        ->orWhere('route', 'like', "%{$searchTerm}%")
+                        ->orWhereHas('parent', function (Builder $parentQuery) use ($searchTerm): void {
+                            $parentQuery->where('label', 'like', "%{$searchTerm}%");
+                        })
+                        ->orWhereHas('navigationPermissions.permissionAction', function (Builder $permissionQuery) use ($searchTerm): void {
+                            $permissionQuery
+                                ->where('label', 'like', "%{$searchTerm}%")
+                                ->orWhere('key', 'like', "%{$searchTerm}%");
+                        });
+                });
+            })
+            ->orderByRaw('CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END')
+            ->orderBy('parent_id')
+            ->orderBy('sort_order')
+            ->orderBy('label')
+            ->get()
+            ->map(fn (NavigationItem $item) => $this->transformNavigationItem($item, $selectedPermissionIds))
+            ->values();
+
+        return response()->json([
+            'message' => 'Access control data fetched successfully.',
+            'data' => [
+                'roles' => $roles,
+                'selected_role' => $selectedRole ? $this->transformRole($selectedRole) : null,
+                'filters' => [
+                    'role_id' => $roleId,
+                    'search' => $search,
+                ],
+                'navigation_items' => $navigationItems,
+            ],
+        ]);
+    }
+
     public function storeUser(StoreSystemUserRequest $request): JsonResponse
     {
         $validated = $request->validated();
@@ -189,6 +256,32 @@ class SettingController extends Controller
             'status' => (bool) $user->status,
             'created_at' => $user->created_at,
             'updated_at' => $user->updated_at,
+        ];
+    }
+
+    private function transformNavigationItem(NavigationItem $item, array $selectedPermissionIds): array
+    {
+        return [
+            'id' => $item->id,
+            'parent_id' => $item->parent_id,
+            'parent_label' => $item->parent?->label,
+            'key' => $item->key,
+            'label' => $item->label,
+            'route' => $item->route,
+            'type' => $item->type,
+            'icon' => $item->icon,
+            'sort_order' => $item->sort_order,
+            'is_active' => (bool) $item->is_active,
+            'action_permissions' => $item->navigationPermissions
+                ->sortBy(fn ($permission) => $permission->permissionAction?->label)
+                ->map(fn ($permission) => [
+                    'navigation_permission_id' => $permission->id,
+                    'permission_action_id' => $permission->permission_action_id,
+                    'action_key' => $permission->permissionAction?->key,
+                    'action_label' => $permission->permissionAction?->label,
+                    'checked' => in_array($permission->id, $selectedPermissionIds, true),
+                ])
+                ->values(),
         ];
     }
 }

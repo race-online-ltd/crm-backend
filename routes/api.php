@@ -7,6 +7,7 @@ use App\Http\Controllers\Clients\ClientsController;
 use App\Http\Controllers\Settings\BackofficeController;
 use App\Http\Controllers\Settings\BusinessEntityController;
 use App\Http\Controllers\GroupControllers\GroupController;
+use App\Http\Controllers\MappingController\MappingController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\KamProductMappingController;
 use App\Http\Controllers\Settings\SettingController;
@@ -40,8 +41,14 @@ Route::middleware('auth:api')->group(function (): void {
         Route::delete('/{type}/{id}', 'destroy');
     });
 
-    Route::apiResource('clients', ClientsController::class)
-        ->only(['index', 'store', 'update', 'destroy']);
+    Route::prefix('clients')->controller(ClientsController::class)->group(function (): void {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('/{client}', 'show');
+        Route::put('/{client}', 'update');
+        Route::patch('/{client}', 'update');
+        Route::delete('/{client}', 'destroy');
+    });
 
     Route::prefix('system')->controller(SettingController::class)->group(function (): void {
         Route::get('/roles', 'rolesIndex');
@@ -98,6 +105,8 @@ Route::middleware('auth:api')->group(function (): void {
         Route::put('/groups/{group}', [GroupController::class, 'update']);
         Route::patch('/groups/{group}', [GroupController::class, 'update']);
         Route::delete('/groups/{group}', [GroupController::class, 'destroy']);
+
+        Route::post('/user-mappings', [MappingController::class, 'store']);
     });
 
     Route::prefix('entity-column-mappings')->group(function () {

@@ -99,7 +99,7 @@ class RoleController extends Controller
                 return [
                     'key' => $perm->permissionAction->key,
                     'label' => $perm->permissionAction->label,
-                    'checked' => in_array($perm->id, $rolePermissionIds)
+                    'checked' => in_array($perm->navigation_permission_id ?? $perm->id, $rolePermissionIds)
                 ];
             })
         ];

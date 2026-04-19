@@ -23,13 +23,7 @@ class UpdateTeamRequest extends FormRequest
 
         foreach (['supervisor_id', 'kam_id'] as $field) {
             if ($this->has($field)) {
-                $payload[$field] = array_values(array_map(
-                    'intval',
-                    array_filter(
-                        (array) $this->input($field),
-                        static fn ($value) => $value !== null && $value !== ''
-                    )
-                ));
+                $payload[$field] = $this->normalizeIds($this->input($field));
             }
         }
 
@@ -48,5 +42,22 @@ class UpdateTeamRequest extends FormRequest
             'kam_id.*' => ['required', 'integer', 'distinct', Rule::exists('users', 'id')],
             'status' => ['sometimes', 'boolean'],
         ];
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function normalizeIds(mixed $value): array
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        $items = is_array($value) ? $value : [$value];
+
+        return array_values(array_map(
+            'intval',
+            array_filter($items, static fn ($item) => $item !== null && $item !== '')
+        ));
     }
 }

@@ -6,11 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\StoreGroupRequest;
 use App\Http\Requests\Settings\UpdateGroupRequest;
 use App\Models\Group;
-use App\Models\GroupSupervisorMapping;
-use App\Models\GroupTeamMapping;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -18,20 +17,12 @@ class GroupController extends Controller
 {
     public function index(): JsonResponse
     {
-        $query = Group::query()->latest();
-
-        if ($this->usesNormalizedSchema()) {
-            $query->with([
-                'supervisorMappings.supervisor.role',
-                'teamMappings.team',
-            ]);
-
-            if ($this->hasDeletedAtColumn()) {
-                $query->whereNull('deleted_at');
-            }
-        }
-
-        $groups = $query
+        $groups = Group::query()
+            ->with([
+                'supervisors.role',
+                'teams',
+            ])
+            ->latest()
             ->get()
             ->map(fn (Group $group) => $this->transformGroup($group))
             ->values();
@@ -47,28 +38,18 @@ class GroupController extends Controller
         $validated = $request->validated();
 
         $group = DB::transaction(function () use ($validated): Group {
-            if ($this->usesNormalizedSchema()) {
-                $group = Group::create([
-                    'group_name' => $validated['group_name'],
-                    'status' => $validated['status'] ?? true,
-                ]);
+            $group = Group::create($this->groupPayload($validated));
 
-                $this->syncMappings($group, $validated['supervisor_id'] ?? [], $validated['team_id'] ?? []);
+            $this->syncAssignments(
+                $group,
+                $validated['supervisor_id'] ?? [],
+                $validated['team_id'] ?? [],
+            );
 
-                return $group->load([
-                    'supervisorMappings.supervisor.role',
-                    'teamMappings.team',
-                ]);
-            }
-
-            $group = Group::create([
-                'name' => $validated['group_name'],
-                'supervisor_id' => $validated['supervisor_id'] ?? [],
-                'team_id' => $validated['team_id'] ?? [],
-                'status' => $validated['status'] ?? true,
+            return $group->load([
+                'supervisors.role',
+                'teams',
             ]);
-
-            return $group->fresh();
         });
 
         return response()->json([
@@ -82,28 +63,18 @@ class GroupController extends Controller
         $validated = $request->validated();
 
         $group = DB::transaction(function () use ($group, $validated): Group {
-            if ($this->usesNormalizedSchema()) {
-                $group->update([
-                    'group_name' => $validated['group_name'],
-                    'status' => $validated['status'] ?? $group->status,
-                ]);
+            $group->update($this->groupPayload($validated, $group));
 
-                $this->syncMappings($group, $validated['supervisor_id'] ?? [], $validated['team_id'] ?? []);
+            $this->syncAssignments(
+                $group,
+                $validated['supervisor_id'] ?? [],
+                $validated['team_id'] ?? [],
+            );
 
-                return $group->load([
-                    'supervisorMappings.supervisor.role',
-                    'teamMappings.team',
-                ]);
-            }
-
-            $group->update([
-                'name' => $validated['group_name'],
-                'supervisor_id' => $validated['supervisor_id'] ?? [],
-                'team_id' => $validated['team_id'] ?? [],
-                'status' => $validated['status'] ?? $group->status,
+            return $group->load([
+                'supervisors.role',
+                'teams',
             ]);
-
-            return $group->fresh();
         });
 
         return response()->json([
@@ -114,87 +85,57 @@ class GroupController extends Controller
 
     public function destroy(Group $group): JsonResponse
     {
-        if ($this->usesNormalizedSchema()) {
-            GroupSupervisorMapping::query()->where('group_id', $group->id)->delete();
-            GroupTeamMapping::query()->where('group_id', $group->id)->delete();
-
-            if ($this->hasDeletedAtColumn()) {
-                $group->update(['deleted_at' => now()]);
-
-                return response()->json([
-                    'message' => 'Group deleted successfully.',
-                ]);
-            }
-        }
-
-        $group->delete();
+        DB::transaction(function () use ($group): void {
+            $group->supervisors()->detach();
+            $group->teams()->detach();
+            $group->delete();
+        });
 
         return response()->json([
             'message' => 'Group deleted successfully.',
         ]);
     }
 
-    private function syncMappings(Group $group, array $supervisorIds, array $teamIds): void
+    /**
+     * @param array<int, int> $supervisorIds
+     * @param array<int, int> $teamIds
+     */
+    private function syncAssignments(Group $group, array $supervisorIds, array $teamIds): void
     {
-        GroupSupervisorMapping::query()->where('group_id', $group->id)->delete();
-        GroupTeamMapping::query()->where('group_id', $group->id)->delete();
-
-        foreach (array_values(array_unique($supervisorIds)) as $supervisorId) {
-            GroupSupervisorMapping::create([
-                'group_id' => $group->id,
-                'supervisor_id' => $supervisorId,
-            ]);
-        }
-
-        foreach (array_values(array_unique($teamIds)) as $teamId) {
-            GroupTeamMapping::create([
-                'group_id' => $group->id,
-                'team_id' => $teamId,
-            ]);
-        }
+        $group->supervisors()->sync($this->normalizeIds($supervisorIds));
+        $group->teams()->sync($this->normalizeIds($teamIds));
     }
 
     private function transformGroup(Group $group): array
     {
-        $groupName = $group->group_name ?? $group->name ?? '';
-        $supervisorIds = $this->usesNormalizedSchema()
-            ? $group->supervisorMappings->pluck('supervisor_id')->values()
-            : $this->normalizeLegacyIds($group->supervisor_id ?? []);
-        $teamIds = $this->usesNormalizedSchema()
-            ? $group->teamMappings->pluck('team_id')->values()
-            : $this->normalizeLegacyIds($group->team_id ?? []);
+        $supervisors = $group->supervisors
+            ->map(fn (User $user) => $this->transformSupervisorOption($user))
+            ->filter()
+            ->values();
+
+        $teams = $group->teams
+            ->map(fn (Team $team) => $this->transformTeamOption($team))
+            ->filter()
+            ->values();
 
         return [
             'id' => $group->id,
-            'group_name' => $groupName,
-            'name' => $groupName,
+            'group_name' => $this->resolveGroupName($group),
+            'name' => $this->resolveGroupName($group),
             'status' => (bool) $group->status,
-            'supervisor_id' => $supervisorIds,
-            'team_id' => $teamIds,
-            'supervisors' => $this->usesNormalizedSchema()
-                ? $group->supervisorMappings
-                    ->map(fn (GroupSupervisorMapping $mapping) => $this->transformSupervisorOption($mapping->supervisor))
-                    ->filter()
-                    ->values()
-                : collect($supervisorIds)->map(fn ($id) => ['id' => $id, 'label' => (string) $id])->values(),
-            'teams' => $this->usesNormalizedSchema()
-                ? $group->teamMappings
-                    ->map(fn (GroupTeamMapping $mapping) => $this->transformTeamOption($mapping->team))
-                    ->filter()
-                    ->values()
-                : collect($teamIds)->map(fn ($id) => ['id' => $id, 'label' => (string) $id])->values(),
+            'supervisor_id' => $supervisors->pluck('id')->values()->all(),
+            'team_id' => $teams->pluck('id')->values()->all(),
+            'supervisors' => $supervisors,
+            'teams' => $teams,
+            'supervisor_name' => $supervisors->pluck('label')->filter()->join(', '),
+            'team_name' => $teams->pluck('label')->filter()->join(', '),
             'created_at' => $group->created_at,
             'updated_at' => $group->updated_at,
-            'deleted_at' => $group->deleted_at ?? null,
         ];
     }
 
-    private function transformSupervisorOption(?User $user): ?array
+    private function transformSupervisorOption(User $user): array
     {
-        if (!$user) {
-            return null;
-        }
-
         $roleName = $user->role?->name;
 
         return [
@@ -206,43 +147,59 @@ class GroupController extends Controller
         ];
     }
 
-    private function transformTeamOption(?Team $team): ?array
+    private function transformTeamOption(Team $team): array
     {
-        if (!$team) {
-            return null;
-        }
+        $teamName = $team->team_name ?? $team->name ?? '';
 
         return [
             'id' => $team->id,
-            'team_name' => $team->team_name ?? $team->name ?? '',
-            'label' => $team->team_name ?? $team->name ?? '',
+            'team_name' => $teamName,
+            'label' => $teamName,
         ];
     }
 
-    private function normalizeLegacyIds(mixed $value): array
+    /**
+     * @param array<int, int> $values
+     * @return array<int, int>
+     */
+    private function normalizeIds(array $values): array
     {
-        if (is_array($value)) {
-            return array_values($value);
-        }
-
-        if (is_string($value) && $value !== '') {
-            $decoded = json_decode($value, true);
-
-            return is_array($decoded) ? array_values($decoded) : [];
-        }
-
-        return [];
+        return collect($values)
+            ->filter(static fn ($value) => $value !== null && $value !== '')
+            ->map(fn ($value) => (int) $value)
+            ->filter(static fn (int $value) => $value > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 
-    private function usesNormalizedSchema(): bool
+    /**
+     * @param array{group_name?: string, status?: bool} $validated
+     * @return array<string, mixed>
+     */
+    private function groupPayload(array $validated, ?Group $group = null): array
     {
-        return Schema::hasColumn('groups', 'group_name')
-            && Schema::hasTable('group_supervisor_mappings')
-            && Schema::hasTable('group_team_mappings');
+        $payload = [
+            $this->groupNameColumn() => $validated['group_name'],
+            'status' => $validated['status'] ?? ($group?->status ?? true),
+        ];
+
+        if (Schema::hasColumn('groups', 'name')) {
+            $payload['name'] = $validated['group_name'];
+        }
+
+        return $payload;
     }
 
-    private function hasDeletedAtColumn(): bool
+    private function groupNameColumn(): string
     {
-        return Schema::hasColumn('groups', 'deleted_at');
+        return Schema::hasColumn('groups', 'group_name') ? 'group_name' : 'name';
+    }
+
+    private function resolveGroupName(Group $group): string
+    {
+        $column = $this->groupNameColumn();
+
+        return (string) ($group->{$column} ?? $group->name ?? $group->group_name ?? '');
     }
 }

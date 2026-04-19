@@ -7,61 +7,70 @@ use App\Models\Client;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ClientsController extends Controller
 {
     public function index(): JsonResponse
     {
-        $clients = Client::query()
-            ->with([
-                'businessEntity:id,name',
-                'division:id,name',
-                'district:id,name',
-                'thana:id,name',
-            ])
+        $perPage = max(1, min((int) request()->integer('per_page', 10), 100));
+
+        $paginator = Client::query()
+            ->with($this->clientRelations())
             ->latest()
-            ->get()
-            ->map(fn (Client $client) => $this->transformClient($client))
-            ->values();
+            ->paginate($perPage)
+            ->withQueryString();
 
         return response()->json([
             'message' => 'Clients fetched successfully.',
-            'data' => $clients,
+            'data' => collect($paginator->items())
+                ->map(fn (Client $client) => $this->transformClient($client))
+                ->values(),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
+            ],
         ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $validated = $this->validateClient($request);
+        $validated['client_id'] = $validated['client_id'] ?? $this->generateClientId($validated['client_name']);
 
         $client = Client::create($validated);
 
         return response()->json([
             'message' => 'Client created successfully.',
-            'data' => $this->transformClient($client->fresh()->load([
-                'businessEntity:id,name',
-                'division:id,name',
-                'district:id,name',
-                'thana:id,name',
-            ])),
+            'data' => $this->transformClient($client->fresh()->load($this->clientRelations())),
         ], 201);
+    }
+
+    public function show(Client $client): JsonResponse
+    {
+        $client->load($this->clientRelations());
+
+        return response()->json([
+            'message' => 'Client fetched successfully.',
+            'data' => $this->transformClient($client),
+        ]);
     }
 
     public function update(Request $request, Client $client): JsonResponse
     {
         $validated = $this->validateClient($request, $client);
+        $validated['client_id'] = $validated['client_id'] ?? $client->client_id;
 
         $client->update($validated);
 
         return response()->json([
             'message' => 'Client updated successfully.',
-            'data' => $this->transformClient($client->fresh()->load([
-                'businessEntity:id,name',
-                'division:id,name',
-                'district:id,name',
-                'thana:id,name',
-            ])),
+            'data' => $this->transformClient($client->fresh()->load($this->clientRelations())),
         ]);
     }
 
@@ -80,12 +89,27 @@ class ClientsController extends Controller
         ]);
     }
 
+    /**
+     * Keep eager-loaded relationships centralized so all CRUD responses stay consistent.
+     *
+     * @return array<int, string>
+     */
+    private function clientRelations(): array
+    {
+        return [
+            'businessEntity:id,name',
+            'division:id,name',
+            'district:id,name',
+            'thana:id,name',
+        ];
+    }
+
     private function validateClient(Request $request, ?Client $client = null): array
     {
         return $request->validate([
             'business_entity_id' => ['required', 'integer', 'exists:business_entities,id'],
             'client_id' => [
-                'required',
+                'nullable',
                 'string',
                 'max:255',
                 Rule::unique('clients', 'client_id')->ignore($client?->id),
@@ -142,5 +166,14 @@ class ClientsController extends Controller
             'created_at' => $client->created_at,
             'updated_at' => $client->updated_at,
         ];
+    }
+
+    private function generateClientId(string $clientName): string
+    {
+        $slug = Str::slug($clientName, '');
+        $base = strtoupper(Str::limit($slug, 10, ''));
+        $suffix = strtoupper(Str::random(6));
+
+        return trim($base.'-'.$suffix, '-');
     }
 }

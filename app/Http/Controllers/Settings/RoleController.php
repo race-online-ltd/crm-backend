@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use App\Models\NavigationItem;
 use App\Models\NavigationPermission;
 use App\Models\RolePermission;
+use Illuminate\Support\Facades\Log;
 
 class RoleController extends Controller
 {
@@ -106,55 +107,133 @@ class RoleController extends Controller
     }
 
 
-   public function updateRolePermissions(Request $request, Role $role)
+//    public function updateRolePermissions(Request $request, Role $role)
+// {
+//     $request->validate([
+//         'permissions' => 'required|array',
+//     ]);
+
+//     $permissions = $request->permissions;
+
+//     $permissionIds = [];
+
+//     foreach ($permissions as $group) {
+//         if (!isset($group['items'])) continue;
+
+//         foreach ($group['items'] as $item) {
+//             if (!isset($item['actions'])) continue;
+
+//             foreach ($item['actions'] as $actionId) {
+//                 $permissionIds[] = $actionId;
+//             }
+//         }
+//     }
+
+//     // 🔥 unique ids
+//     $permissionIds = array_unique($permissionIds);
+
+//     // Validate IDs exist
+//     $validIds = NavigationPermission::whereIn('id', $permissionIds)
+//         ->pluck('id')
+//         ->toArray();
+
+//     // 🔥 Remove old permissions
+//     RolePermission::where('role_id', $role->id)->delete();
+
+//     // 🔥 Insert new permissions
+//     $insertData = [];
+
+//     foreach ($validIds as $navPermId) {
+//         $insertData[] = [
+//             'role_id' => $role->id,
+//             'navigation_permission_id' => $navPermId,
+//         ];
+//     }
+
+//     if (!empty($insertData)) {
+//         RolePermission::insert($insertData);
+//     }
+
+//     return response()->json([
+//         'message' => 'Permissions updated successfully',
+//     ]);
+// }
+
+
+public function updateRolePermissions(Request $request, Role $role)
 {
     $request->validate([
-        'permissions' => 'required|array',
+        'permissions' => 'required',
     ]);
-
-    $permissions = $request->permissions;
-
+    
+    $data = $request->permissions;
+    
+    // 🔍 DEBUG: Log what we received
+    Log::info('Received permissions data:', ['data' => $data]);
+    
     $permissionIds = [];
-
-    foreach ($permissions as $group) {
-        if (!isset($group['items'])) continue;
-
-        foreach ($group['items'] as $item) {
+    
+    // Handle groups
+    if (isset($data['groups'])) {
+        Log::info('Groups found:', ['count' => count($data['groups'])]);
+        foreach ($data['groups'] as $group) {
+            if (!isset($group['items'])) continue;
+            Log::info('Group items:', ['items' => $group['items']]);
+            foreach ($group['items'] as $item) {
+                if (!isset($item['actions'])) continue;
+                Log::info('Item actions:', ['actions' => $item['actions']]);
+                foreach ($item['actions'] as $actionId) {
+                    $permissionIds[] = $actionId;
+                }
+            }
+        }
+    }
+    
+    // Handle standalone
+    if (isset($data['standalone'])) {
+        Log::info('Standalone found:', ['count' => count($data['standalone'])]);
+        foreach ($data['standalone'] as $item) {
             if (!isset($item['actions'])) continue;
-
+            Log::info('Standalone actions:', ['actions' => $item['actions']]);
             foreach ($item['actions'] as $actionId) {
                 $permissionIds[] = $actionId;
             }
         }
     }
-
-    // 🔥 unique ids
+    
+    // Get unique permission IDs
     $permissionIds = array_unique($permissionIds);
-
-    // Validate IDs exist
+    Log::info('Permission IDs collected:', ['ids' => $permissionIds]);
+    
+    // Validate that all IDs exist in the database
     $validIds = NavigationPermission::whereIn('id', $permissionIds)
         ->pluck('id')
         ->toArray();
-
-    // 🔥 Remove old permissions
+    
+    Log::info('Valid IDs from database:', ['validIds' => $validIds]);
+    
+    // Remove old permissions for this role
     RolePermission::where('role_id', $role->id)->delete();
-
-    // 🔥 Insert new permissions
+    
+    // Insert new permissions
     $insertData = [];
-
     foreach ($validIds as $navPermId) {
         $insertData[] = [
             'role_id' => $role->id,
             'navigation_permission_id' => $navPermId,
         ];
     }
-
+    
+    Log::info('Insert data prepared:', ['insertData' => $insertData]);
+    
     if (!empty($insertData)) {
         RolePermission::insert($insertData);
+        Log::info('Permissions inserted successfully');
     }
-
+    
     return response()->json([
         'message' => 'Permissions updated successfully',
+        'total_permissions' => count($validIds),
     ]);
 }
 

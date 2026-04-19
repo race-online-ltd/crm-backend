@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\ProfileController;
+use App\Http\Controllers\AreaController\AreaController;
+use App\Http\Controllers\Clients\ClientsController;
 use App\Http\Controllers\Settings\BackofficeController;
 use App\Http\Controllers\Settings\BusinessEntityController;
 use App\Http\Controllers\GroupControllers\GroupController;
@@ -27,6 +29,19 @@ Route::middleware('auth:api')->group(function (): void {
     Route::get('profile', [ProfileController::class, 'show']);
     Route::put('profile', [ProfileController::class, 'update']);
     Route::put('profile/change-password', [ProfileController::class, 'changePassword']);
+
+    Route::prefix('areas')->controller(AreaController::class)->group(function (): void {
+        Route::get('/', 'index');
+        Route::get('/divisions/{division}/districts', 'districts');
+        Route::get('/districts/{district}/thanas', 'thanas');
+        Route::post('/', 'store');
+        Route::put('/{type}/{id}', 'update');
+        Route::patch('/{type}/{id}', 'update');
+        Route::delete('/{type}/{id}', 'destroy');
+    });
+
+    Route::apiResource('clients', ClientsController::class)
+        ->only(['index', 'store', 'update', 'destroy']);
 
     Route::prefix('system')->controller(SettingController::class)->group(function (): void {
         Route::get('/roles', 'rolesIndex');

@@ -1,0 +1,146 @@
+<?php
+
+namespace App\Http\Controllers\Clients;
+
+use App\Http\Controllers\Controller;
+use App\Models\Client;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+
+class ClientsController extends Controller
+{
+    public function index(): JsonResponse
+    {
+        $clients = Client::query()
+            ->with([
+                'businessEntity:id,name',
+                'division:id,name',
+                'district:id,name',
+                'thana:id,name',
+            ])
+            ->latest()
+            ->get()
+            ->map(fn (Client $client) => $this->transformClient($client))
+            ->values();
+
+        return response()->json([
+            'message' => 'Clients fetched successfully.',
+            'data' => $clients,
+        ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $this->validateClient($request);
+
+        $client = Client::create($validated);
+
+        return response()->json([
+            'message' => 'Client created successfully.',
+            'data' => $this->transformClient($client->fresh()->load([
+                'businessEntity:id,name',
+                'division:id,name',
+                'district:id,name',
+                'thana:id,name',
+            ])),
+        ], 201);
+    }
+
+    public function update(Request $request, Client $client): JsonResponse
+    {
+        $validated = $this->validateClient($request, $client);
+
+        $client->update($validated);
+
+        return response()->json([
+            'message' => 'Client updated successfully.',
+            'data' => $this->transformClient($client->fresh()->load([
+                'businessEntity:id,name',
+                'division:id,name',
+                'district:id,name',
+                'thana:id,name',
+            ])),
+        ]);
+    }
+
+    public function destroy(Client $client): JsonResponse
+    {
+        try {
+            $client->delete();
+        } catch (QueryException) {
+            return response()->json([
+                'message' => 'Client could not be deleted.',
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Client deleted successfully.',
+        ]);
+    }
+
+    private function validateClient(Request $request, ?Client $client = null): array
+    {
+        return $request->validate([
+            'business_entity_id' => ['required', 'integer', 'exists:business_entities,id'],
+            'client_id' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('clients', 'client_id')->ignore($client?->id),
+            ],
+            'client_name' => ['required', 'string', 'max:255'],
+            'client_from' => ['required', Rule::in(['Prism', 'MQ', 'maxim Orbit', 'maxim Race'])],
+            'contact_person' => ['nullable', 'string', 'max:255'],
+            'contact_no' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'address' => ['nullable', 'string'],
+            'lat' => ['nullable', 'numeric', 'between:-90,90'],
+            'long' => ['nullable', 'numeric', 'between:-180,180'],
+            'division_id' => ['required', 'integer', 'exists:divisions,id'],
+            'district_id' => ['required', 'integer', 'exists:districts,id'],
+            'thana_id' => ['required', 'integer', 'exists:thanas,id'],
+            'licence' => ['required', Rule::in(['Active', 'Expire', 'Pending', 'None'])],
+            'status' => ['sometimes', Rule::in(['active', 'inactive'])],
+        ]);
+    }
+
+    private function transformClient(Client $client): array
+    {
+        return [
+            'id' => $client->id,
+            'business_entity_id' => $client->business_entity_id,
+            'business_entity_name' => $client->businessEntity?->name,
+            'client_id' => $client->client_id,
+            'client_name' => $client->client_name,
+            'client_from' => $client->client_from,
+            'contact_person' => $client->contact_person,
+            'contact_no' => $client->contact_no,
+            'email' => $client->email,
+            'address' => $client->address,
+            'lat' => $client->lat,
+            'long' => $client->long,
+            'division_id' => $client->division_id,
+            'district_id' => $client->district_id,
+            'thana_id' => $client->thana_id,
+            'division' => $client->division ? [
+                'id' => $client->division->id,
+                'name' => $client->division->name,
+            ] : null,
+            'district' => $client->district ? [
+                'id' => $client->district->id,
+                'name' => $client->district->name,
+            ] : null,
+            'thana' => $client->thana ? [
+                'id' => $client->thana->id,
+                'name' => $client->thana->name,
+            ] : null,
+            'licence' => $client->licence,
+            'status' => $client->status,
+            'deleted_at' => $client->deleted_at,
+            'created_at' => $client->created_at,
+            'updated_at' => $client->updated_at,
+        ];
+    }
+}

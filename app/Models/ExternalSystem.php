@@ -6,23 +6,24 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class BusinessEntity extends Model
+class ExternalSystem extends Model
 {
     use HasFactory;
 
+    protected $table = 'external_system';
+
     protected $fillable = [
-        'name',
-        'status',
+        'external_system_name',
+        'external_system_api',
     ];
 
     protected $casts = [
-        'status' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
 
-    public function products(): HasMany
+    public function userMappings(): HasMany
     {
-        return $this->hasMany(Product::class, 'business_entity_id');
+        return $this->hasMany(InternalExternalUserMap::class, 'external_system_id');
     }
 }

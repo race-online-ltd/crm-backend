@@ -2,9 +2,12 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\ProfileController;
+use App\Http\Controllers\Settings\BackofficeController;
 use App\Http\Controllers\Settings\BusinessEntityController;
 use App\Http\Controllers\GroupControllers\GroupController;
+use App\Http\Controllers\Settings\KamProductMappingController;
 use App\Http\Controllers\Settings\SettingController;
+use App\Http\Controllers\Settings\SystemAccountConnectionController;
 use App\Http\Controllers\TeamControllers\TeamController;
 use Illuminate\Support\Facades\Route;
 
@@ -38,11 +41,28 @@ Route::middleware('auth:api')->group(function (): void {
     });
 
     Route::prefix('system')->group(function (): void {
+        Route::get('/backoffice/options', [BackofficeController::class, 'options']);
+        Route::get('/backoffice', [BackofficeController::class, 'index']);
+        Route::post('/backoffice', [BackofficeController::class, 'store']);
+        Route::put('/backoffice/{backoffice}', [BackofficeController::class, 'update']);
+        Route::patch('/backoffice/{backoffice}', [BackofficeController::class, 'update']);
+        Route::delete('/backoffice/{backoffice}', [BackofficeController::class, 'destroy']);
+
         Route::get('/business-entities', [BusinessEntityController::class, 'index']);
         Route::post('/business-entities', [BusinessEntityController::class, 'store']);
         Route::put('/business-entities/{businessEntity}', [BusinessEntityController::class, 'update']);
         Route::patch('/business-entities/{businessEntity}', [BusinessEntityController::class, 'update']);
         Route::delete('/business-entities/{businessEntity}', [BusinessEntityController::class, 'destroy']);
+
+        Route::get('/kam-mappings/options', [KamProductMappingController::class, 'options']);
+        Route::get('/business-entities/{businessEntity}/products', [KamProductMappingController::class, 'products']);
+        Route::get('/kam-mappings', [KamProductMappingController::class, 'show']);
+        Route::post('/kam-mappings', [KamProductMappingController::class, 'store']);
+
+        Route::get('/external-systems', [SystemAccountConnectionController::class, 'externalSystemsIndex']);
+        Route::get('/external-systems/{externalSystem}/users', [SystemAccountConnectionController::class, 'externalSystemUsers']);
+        Route::get('/users/{systemUser}/external-account-connections', [SystemAccountConnectionController::class, 'showUserConnections']);
+        Route::post('/users/{systemUser}/external-account-connections', [SystemAccountConnectionController::class, 'storeUserConnections']);
 
         Route::get('/teams', [TeamController::class, 'index']);
         Route::post('/teams', [TeamController::class, 'store']);

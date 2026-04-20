@@ -7,18 +7,39 @@ use App\Models\Client;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ClientsController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $perPage = max(1, min((int) request()->integer('per_page', 10), 100));
+        $businessEntityId = $request->integer('business_entity_id');
+        $clientName = trim((string) $request->input('client_name', ''));
+        $divisionId = $request->integer('division_id');
+        $contactPerson = trim((string) $request->input('contact_person', ''));
+        $licence = trim((string) $request->input('licence', ''));
 
-        $paginator = Client::query()
+        $query = Client::query()
             ->with($this->clientRelations())
-            ->latest()
+            ->when($businessEntityId > 0, function ($query) use ($businessEntityId): void {
+                $query->where('business_entity_id', $businessEntityId);
+            })
+            ->when($clientName !== '', function ($query) use ($clientName): void {
+                $query->where('client_name', 'like', '%'.$clientName.'%');
+            })
+            ->when($divisionId > 0, function ($query) use ($divisionId): void {
+                $query->where('division_id', $divisionId);
+            })
+            ->when($contactPerson !== '', function ($query) use ($contactPerson): void {
+                $query->where('contact_person', 'like', '%'.$contactPerson.'%');
+            })
+            ->when($licence !== '', function ($query) use ($licence): void {
+                $query->where('licence', $licence);
+            })
+            ->latest();
+
+        $paginator = $query
             ->paginate($perPage)
             ->withQueryString();
 
@@ -41,7 +62,6 @@ class ClientsController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $this->validateClient($request);
-        $validated['client_id'] = $validated['client_id'] ?? $this->generateClientId($validated['client_name']);
 
         $client = Client::create($validated);
 
@@ -63,8 +83,7 @@ class ClientsController extends Controller
 
     public function update(Request $request, Client $client): JsonResponse
     {
-        $validated = $this->validateClient($request, $client);
-        $validated['client_id'] = $validated['client_id'] ?? $client->client_id;
+        $validated = $this->validateClient($request);
 
         $client->update($validated);
 
@@ -104,18 +123,13 @@ class ClientsController extends Controller
         ];
     }
 
-    private function validateClient(Request $request, ?Client $client = null): array
+    private function validateClient(Request $request): array
     {
         return $request->validate([
             'business_entity_id' => ['required', 'integer', 'exists:business_entities,id'],
-            'client_id' => [
-                'nullable',
-                'string',
-                'max:255',
-                Rule::unique('clients', 'client_id')->ignore($client?->id),
-            ],
             'client_name' => ['required', 'string', 'max:255'],
-            'client_from' => ['required', Rule::in(['Prism', 'MQ', 'maxim Orbit', 'maxim Race'])],
+            'origin' => ['nullable', 'string', 'max:255'],
+            'origin_id' => ['nullable', 'string', 'max:255'],
             'contact_person' => ['nullable', 'string', 'max:255'],
             'contact_no' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -136,9 +150,9 @@ class ClientsController extends Controller
             'id' => $client->id,
             'business_entity_id' => $client->business_entity_id,
             'business_entity_name' => $client->businessEntity?->name,
-            'client_id' => $client->client_id,
             'client_name' => $client->client_name,
-            'client_from' => $client->client_from,
+            'origin' => $client->origin,
+            'origin_id' => $client->origin_id,
             'contact_person' => $client->contact_person,
             'contact_no' => $client->contact_no,
             'email' => $client->email,
@@ -166,14 +180,5 @@ class ClientsController extends Controller
             'created_at' => $client->created_at,
             'updated_at' => $client->updated_at,
         ];
-    }
-
-    private function generateClientId(string $clientName): string
-    {
-        $slug = Str::slug($clientName, '');
-        $base = strtoupper(Str::limit($slug, 10, ''));
-        $suffix = strtoupper(Str::random(6));
-
-        return trim($base.'-'.$suffix, '-');
     }
 }

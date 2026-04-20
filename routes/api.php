@@ -14,6 +14,7 @@ use App\Http\Controllers\Settings\SettingController;
 use App\Http\Controllers\Settings\SystemAccountConnectionController;
 use App\Http\Controllers\TeamControllers\TeamController;
 use App\Http\Controllers\EntityColumnMappingController;
+use App\Http\Controllers\NavigationItemController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -27,6 +28,15 @@ Route::prefix('auth')->group(function (): void {
 });
 
 Route::middleware('auth:api')->group(function (): void {
+
+
+    Route::get('/navigation-items/active', [NavigationItemController::class, 'getActiveItems']);
+    Route::get('/navigation-features/{navigation_id}', [NavigationItemController::class, 'getByNavigationId']);
+    Route::post('/user-view-permissions', [NavigationItemController::class, 'store']);
+    Route::get('/user-view-permissions', [NavigationItemController::class, 'show']);
+    Route::put('/user-view-permissions', [NavigationItemController::class, 'update']);
+
+
     Route::get('profile', [ProfileController::class, 'show']);
     Route::put('profile', [ProfileController::class, 'update']);
     Route::put('profile/change-password', [ProfileController::class, 'changePassword']);

@@ -11,7 +11,7 @@ return [
 
     'allowed_headers' => ['Authorization', 'Content-Type', 'Accept', 'X-Requested-With'],
 
-    'exposed_headers' => [],
+    'exposed_headers' => ['Authorization'],
 
     'max_age' => 0,
 

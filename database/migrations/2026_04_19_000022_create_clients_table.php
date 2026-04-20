@@ -13,9 +13,9 @@ return new class extends Migration
             $table->foreignId('business_entity_id')
                 ->constrained('business_entities')
                 ->restrictOnDelete();
-            $table->string('client_id')->unique();
             $table->string('client_name');
-            $table->enum('client_from', ['Prism', 'MQ', 'maxim Orbit', 'maxim Race']);
+            $table->string('origin')->nullable();
+            $table->string('origin_id')->nullable();
             $table->string('contact_person')->nullable();
             $table->string('contact_no')->nullable();
             $table->string('email')->nullable();

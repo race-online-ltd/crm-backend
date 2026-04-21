@@ -89,6 +89,10 @@ $groupedPermissions = collect($permissionKeys)
 // attach raw permissions to user (for middleware)
 $user->permissions = $permissionKeys;
 
+
+// navigation
+$navigation = $this->getNavigationByRole($user->role_id);
+
         return response()->json([
             'message' => 'Login successful.',
             'data' => [
@@ -97,10 +101,67 @@ $user->permissions = $permissionKeys;
                 'expires_in' => JWTAuth::factory()->getTTL() * 60,
                 'user' => $this->transformUser((auth('api')->user() ?? $user)->load('role')),
                 'permissions' => $groupedPermissions,
+                'navigation' => $navigation,
             ],
         ]);
     }
 
+    private function getNavigationByRole($roleId)
+{
+    $rows = \DB::select("
+        SELECT
+            ni.id,
+            ni.parent_id,
+            ni.key,
+            ni.label,
+            ni.route,
+            ni.icon,
+            ni.sort_order
+        FROM navigation_items ni
+        INNER JOIN navigation_permissions np
+            ON np.navigation_item_id = ni.id
+        INNER JOIN permission_actions pa
+            ON pa.id = np.permission_action_id
+        INNER JOIN role_permissions rp
+            ON rp.navigation_permission_id = np.id
+        WHERE rp.role_id = ?
+          AND pa.label = 'View'
+          AND ni.is_active = 1
+        ORDER BY ni.parent_id ASC, ni.sort_order ASC
+    ", [$roleId]);
+
+    return $this->buildTreeFromFlat($rows);
+}
+
+private function buildTreeFromFlat(array $rows): array
+{
+    $items = [];
+    $tree = [];
+
+    // 🔹 Step 1: Normalize + index সব item
+    foreach ($rows as $row) {
+        $items[$row->id] = [
+            'id' => $row->id,
+            'key' => $row->key,
+            'label' => $row->label,
+            'icon' => $row->icon,
+            'route' => $row->route,
+            'children' => []
+        ];
+    }
+
+    // 🔹 Step 2: Parent-child relation build
+    foreach ($rows as $row) {
+        if ($row->parent_id && isset($items[$row->parent_id])) {
+            $items[$row->parent_id]['children'][] = &$items[$row->id];
+        } else {
+            $tree[] = &$items[$row->id];
+        }
+    }
+
+    // 🔹 Step 3: Reset reference issue (important)
+    return array_values($tree);
+}
     public function logout(): JsonResponse
     {
         JWTAuth::invalidate(JWTAuth::getToken());

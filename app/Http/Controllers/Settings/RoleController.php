@@ -203,73 +203,99 @@ private function formatTree($menu)
         'children' => array_map(fn($child) => $this->formatTree($child), $menu['children'])
     ];
 }
-   public function updateRolePermissions(Request $request, Role $role)
-{
-    $permissions = $request->input('permissions');
-    if ($permissions === null) {
-        $permissions = $request->all();
-    }
+//    public function updateRolePermissions(Request $request, Role $role)
+// {
+//     $permissions = $request->input('permissions');
+//     if ($permissions === null) {
+//         $permissions = $request->all();
+//     }
 
-    if (!is_array($permissions)) {
+//     if (!is_array($permissions)) {
+//         return response()->json([
+//             'message' => 'Permissions must be an array.',
+//         ], 422);
+//     }
+
+//     $permissionIds = [];
+
+//     foreach ($permissions as $permission) {
+//         if (is_array($permission)) {
+//             if (isset($permission['items']) && is_array($permission['items'])) {
+//                 foreach ($permission['items'] as $item) {
+//                     if (!isset($item['actions']) || !is_array($item['actions'])) {
+//                         continue;
+//                     }
+//                     foreach ($item['actions'] as $actionId) {
+//                         $permissionIds[] = $actionId;
+//                     }
+//                 }
+//                 continue;
+//             }
+
+//             if (isset($permission['actions']) && is_array($permission['actions'])) {
+//                 foreach ($permission['actions'] as $actionId) {
+//                     $permissionIds[] = $actionId;
+//                 }
+//                 continue;
+//             }
+
+//             $permissionIds[] = $permission;
+//             continue;
+//         }
+
+//         $permissionIds[] = $permission;
+//     }
+
+//     // 🔥 Normalize and unique ids
+//     $permissionIds = array_values(array_unique(array_filter($permissionIds, fn($id) => $id !== null && $id !== '')));
+
+//     // Validate IDs exist
+//     $validIds = NavigationPermission::whereIn('id', $permissionIds)
+//         ->pluck('id')
+//         ->toArray();
+
+//     // 🔥 Remove old permissions
+//     RolePermission::where('role_id', $role->id)->delete();
+
+//     // 🔥 Insert new permissions
+//     if (!empty($validIds)) {
+//         $insertData = array_map(fn($navPermId) => [
+//             'role_id' => $role->id,
+//             'navigation_permission_id' => $navPermId,
+//         ], $validIds);
+//         RolePermission::insert($insertData);
+//     }
+
+//     return response()->json([
+//         'message' => 'Permissions updated successfully',
+//     ]);
+// }
+
+
+public function updateRolePermissions(Request $request, Role $role)
+{
+    $permissionIds = $request->input('permissions', []);
+
+    if (!is_array($permissionIds)) {
         return response()->json([
-            'message' => 'Permissions must be an array.',
+            'message' => 'Permissions must be an array of IDs.',
         ], 422);
     }
 
-    $permissionIds = [];
+    // ✅ clean + unique
+    $permissionIds = array_values(array_unique(array_filter($permissionIds)));
 
-    foreach ($permissions as $permission) {
-        if (is_array($permission)) {
-            if (isset($permission['items']) && is_array($permission['items'])) {
-                foreach ($permission['items'] as $item) {
-                    if (!isset($item['actions']) || !is_array($item['actions'])) {
-                        continue;
-                    }
-                    foreach ($item['actions'] as $actionId) {
-                        $permissionIds[] = $actionId;
-                    }
-                }
-                continue;
-            }
-
-            if (isset($permission['actions']) && is_array($permission['actions'])) {
-                foreach ($permission['actions'] as $actionId) {
-                    $permissionIds[] = $actionId;
-                }
-                continue;
-            }
-
-            $permissionIds[] = $permission;
-            continue;
-        }
-
-        $permissionIds[] = $permission;
-    }
-
-    // 🔥 Normalize and unique ids
-    $permissionIds = array_values(array_unique(array_filter($permissionIds, fn($id) => $id !== null && $id !== '')));
-
-    // Validate IDs exist
+    // ✅ validate অস্তিত্ব আছে কিনা
     $validIds = NavigationPermission::whereIn('id', $permissionIds)
         ->pluck('id')
         ->toArray();
 
-    // 🔥 Remove old permissions
-    RolePermission::where('role_id', $role->id)->delete();
-
-    // 🔥 Insert new permissions
-    if (!empty($validIds)) {
-        $insertData = array_map(fn($navPermId) => [
-            'role_id' => $role->id,
-            'navigation_permission_id' => $navPermId,
-        ], $validIds);
-        RolePermission::insert($insertData);
-    }
+    // ✅ sync (BEST PRACTICE)
+    $role->permissions()->sync($validIds);
 
     return response()->json([
         'message' => 'Permissions updated successfully',
     ]);
 }
-
 
 }

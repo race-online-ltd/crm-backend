@@ -25,4 +25,9 @@ class BusinessEntity extends Model
     {
         return $this->hasMany(Product::class, 'business_entity_id');
     }
+
+    public function leadPipelineStages(): HasMany
+    {
+        return $this->hasMany(LeadPipelineStage::class, 'business_entity_id');
+    }
 }

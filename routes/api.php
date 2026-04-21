@@ -52,12 +52,18 @@ Route::middleware('auth:api')->group(function (): void {
     });
 
     Route::prefix('clients')->controller(ClientsController::class)->group(function (): void {
-        Route::get('/', 'index');
-        Route::post('/', 'store');
-        Route::get('/{client}', 'show');
-        Route::put('/{client}', 'update');
-        Route::patch('/{client}', 'update');
-        Route::delete('/{client}', 'destroy');
+        Route::get('/', 'index')->defaults('permission', 'clients.view')
+        ->middleware('permission');
+        Route::post('/', 'store') ->defaults('permission', 'clients.create')
+        ->middleware('permission');
+        Route::get('/{client}', 'show')->defaults('permission', 'clients.view')
+        ->middleware('permission');
+        Route::put('/{client}', 'update')->defaults('permission', 'clients.update')
+        ->middleware('permission');
+        Route::patch('/{client}', 'update')->defaults('permission', 'clients.update')
+        ->middleware('permission');
+        Route::delete('/{client}', 'destroy')->defaults('permission', 'clients.delete')
+        ->middleware('permission');
     });
 
     Route::prefix('system')->controller(SettingController::class)->group(function (): void {

@@ -60,4 +60,13 @@ class User extends Authenticatable implements JWTSubject
     {
         return [];
     }
+
+    public function getPermissionKeys()
+    {
+        return DB::table('role_permissions as rp')
+            ->join('permission_actions as pa', 'pa.id', '=', 'rp.navigation_permission_id')
+            ->where('rp.role_id', $this->role_id)
+            ->pluck('pa.key')
+            ->toArray();
+    }
 }

@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Illuminate\Support\Facades\DB;
 
 class AuthController extends Controller
 {
@@ -57,46 +58,37 @@ class AuthController extends Controller
             ], 401);
         }
 
-        $rows = DB::select("
-        SELECT
-            u.id AS user_id,
-            u.user_name,
-            u.email,
-            r.id AS role_id,
-            r.name AS role_name,
-            pa.id AS permission_id,
-            pa.label AS permission_name
-        FROM users u
-        INNER JOIN roles r ON r.id = u.role_id
-        LEFT JOIN role_permissions rp ON rp.role_id = r.id
-        LEFT JOIN permission_actions pa ON pa.id = rp.navigation_permission_id
-        WHERE u.id = ?
-    ", [$userId]);
 
-    // ❌ যদি user না থাকে
-    if (empty($rows)) {
-        return response()->json([
-            'message' => 'User not found'
-        ], 404);
-    }
+    $rows = DB::select("
+    SELECT pa.key AS permission_key
+    FROM users u
+    INNER JOIN roles r ON r.id = u.role_id
+    LEFT JOIN role_permissions rp ON rp.role_id = r.id
+    LEFT JOIN permission_actions pa ON pa.id = rp.navigation_permission_id
+    WHERE u.id = ?
+", [$user->id]);
 
-    // ✅ Main response build
-    $rolePermissions = [
-        'user' => [
-            'id' => $rows[0]->user_id,
-            'name' => $rows[0]->user_name,
-            'email' => $rows[0]->email,
-        ],
-        'role' => [
-            'id' => $rows[0]->role_id,
-            'name' => $rows[0]->role_name,
-        ],
-        'permissions' => collect($rows)
-            ->pluck('permission_name')
-            ->filter() // null remove
-            ->unique()
-            ->values()
-    ];
+// flat keys
+$permissionKeys = collect($rows)
+    ->pluck('permission_key')
+    ->filter()
+    ->unique()
+    ->values()
+    ->toArray();
+
+// group for response
+$groupedPermissions = collect($permissionKeys)
+    ->map(function ($key) {
+        [$module, $action] = explode('.', $key);
+        return compact('module', 'action');
+    })
+    ->groupBy('module')
+    ->map(fn($items) => $items->pluck('action')->unique()->values())
+    ->toArray();
+
+// attach raw permissions to user (for middleware)
+$user->permissions = $permissionKeys;
+
         return response()->json([
             'message' => 'Login successful.',
             'data' => [
@@ -104,7 +96,7 @@ class AuthController extends Controller
                 'token_type' => 'bearer',
                 'expires_in' => JWTAuth::factory()->getTTL() * 60,
                 'user' => $this->transformUser((auth('api')->user() ?? $user)->load('role')),
-                'permissions' => $rolePermissions,
+                'permissions' => $groupedPermissions,
             ],
         ]);
     }

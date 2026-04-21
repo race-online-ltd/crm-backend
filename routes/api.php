@@ -16,6 +16,23 @@ use App\Http\Controllers\TeamControllers\TeamController;
 use App\Http\Controllers\EntityColumnMappingController;
 use App\Http\Controllers\NavigationItemController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Artisan;
+
+Route::prefix('system')->group(function (): void {
+
+    Route::post('/permissions/sync', function () {
+
+        Artisan::call('permissions:sync');
+
+        return response()->json([
+            'message' => 'Permissions synced successfully',
+            'data' => true
+        ]);
+
+    })
+    ->middleware(['auth:api', 'permission']);
+
+});
 
 Route::prefix('auth')->group(function (): void {
     Route::post('login', [AuthController::class, 'login']);
@@ -79,6 +96,7 @@ Route::middleware('auth:api')->group(function (): void {
         Route::put('/users/{systemUser}', 'updateUser');
         Route::patch('/users/{systemUser}', 'updateUser');
         Route::delete('/users/{systemUser}', 'destroyUser');
+
     });
 
     Route::prefix('system')->controller(RoleController::class)->group(function (): void {

@@ -11,11 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('user_view_permissions', function (Blueprint $table) {
+        Schema::create('feature_action_permissions', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('role_id');
-            $table->unsignedBigInteger('navigation_id');
-            $table->unsignedBigInteger('feature_id');
+            $table->unsignedBigInteger('user_view_id');
             $table->boolean('read')->nullable();
             $table->boolean('write')->nullable();
             $table->boolean('modify')->nullable();
@@ -29,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('user_view_permissions');
+        Schema::dropIfExists('feature_action_permissions');
     }
 };

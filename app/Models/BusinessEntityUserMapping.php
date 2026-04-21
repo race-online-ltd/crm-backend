@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,18 +23,27 @@ class BusinessEntityUserMapping extends Model
         'updated_at' => 'datetime',
     ];
 
+    /**
+     * Get the user that owns this mapping
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    /**
+     * Get the business entity
+     */
     public function businessEntity(): BelongsTo
     {
         return $this->belongsTo(BusinessEntity::class, 'business_entity_id');
     }
 
+    /**
+     * Get the client (KAM)
+     */
     public function kam(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'kam_id');
+        return $this->belongsTo(Client::class, 'kam_id');
     }
 }

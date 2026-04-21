@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EntityColumnMapping;
+use App\Models\FeatureActionPermission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -41,6 +43,10 @@ class NavigationItemController extends Controller
             'role_id'       => 'required|integer',
             'navigation_id' => 'required|integer',
             'feature_id'    => 'required|integer',
+            'read'          => 'nullable|boolean',
+            'write'         => 'nullable|boolean',
+            'modify'        => 'nullable|boolean',
+            'delete'        => 'nullable|boolean',
         ]);
 
         
@@ -62,6 +68,10 @@ class NavigationItemController extends Controller
             'role_id'       => $request->role_id,
             'navigation_id' => $request->navigation_id,
             'feature_id'    => $request->feature_id,
+            'read'          => $request->read ?? false,
+            'write'         => $request->write ?? false,
+            'modify'        => $request->modify ?? false,
+            'delete'        => $request->delete ?? false,
             'created_at'    => now(),
             'updated_at'    => now(),
         ]);
@@ -75,6 +85,10 @@ class NavigationItemController extends Controller
 
 
 
+    
+
+
+
     public function show(Request $request)
     {
         $request->validate([
@@ -85,7 +99,7 @@ class NavigationItemController extends Controller
         $data = DB::table('user_view_permissions')
             ->where('role_id', $request->role_id)
             ->where('navigation_id', $request->navigation_id)
-            ->pluck('feature_id'); // only feature IDs
+            ->get();
 
         return response()->json([
             'success' => true,
@@ -100,33 +114,34 @@ class NavigationItemController extends Controller
         $request->validate([
             'role_id'       => 'required|integer',
             'navigation_id' => 'required|integer',
-            'feature_ids'   => 'required|array',
+            'permissions'   => 'required|array',
+            'permissions.*.feature_id' => 'required|integer',
+            'permissions.*.read'   => 'nullable|boolean',
+            'permissions.*.write'  => 'nullable|boolean',
+            'permissions.*.modify' => 'nullable|boolean',
+            'permissions.*.delete' => 'nullable|boolean',
         ]);
 
         $role_id = $request->role_id;
         $navigation_id = $request->navigation_id;
-        $feature_ids = $request->feature_ids;
 
-        // ✅ Delete old permissions
-        DB::table('user_view_permissions')
-            ->where('role_id', $role_id)
-            ->where('navigation_id', $navigation_id)
-            ->delete();
-
-        // ✅ Insert new ones
-        $insertData = [];
-
-        foreach ($feature_ids as $feature_id) {
-            $insertData[] = [
-                'role_id'       => $role_id,
-                'navigation_id' => $navigation_id,
-                'feature_id'    => $feature_id,
-                'created_at'    => now(),
-                'updated_at'    => now(),
-            ];
+        foreach ($request->permissions as $item) {
+            DB::table('user_view_permissions')->updateOrInsert(
+                [
+                    'role_id'       => $role_id,
+                    'navigation_id' => $navigation_id,
+                    'feature_id'    => $item['feature_id'],
+                ],
+                [
+                    'read'       => $item['read'] ?? false,
+                    'write'      => $item['write'] ?? false,
+                    'modify'     => $item['modify'] ?? false,
+                    'delete'     => $item['delete'] ?? false,
+                    'updated_at' => now(),
+                    'created_at' => now(),
+                ]
+            );
         }
-
-        DB::table('user_view_permissions')->insert($insertData);
 
         return response()->json([
             'success' => true,
@@ -134,5 +149,82 @@ class NavigationItemController extends Controller
         ]);
     }
 
+
+    public function storeFeatureAction(Request $request)
+    {
+        $validated = $request->validate([
+            'user_view_id' => 'required|exists:user_view_permissions,id',
+            'read'   => 'nullable|boolean',
+            'write'  => 'nullable|boolean',
+            'modify' => 'nullable|boolean',
+            'delete' => 'nullable|boolean',
+        ]);
+
+        // If you want one record per user_view_id (update if exists)
+        $permission = FeatureActionPermission::updateOrCreate(
+            ['user_view_id' => $validated['user_view_id']],
+            [
+                'read'   => $validated['read'] ?? false,
+                'write'  => $validated['write'] ?? false,
+                'modify' => $validated['modify'] ?? false,
+                'delete' => $validated['delete'] ?? false,
+            ]
+        );
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Permission saved successfully',
+            'data' => $permission
+        ]);
+    }
+
+
+
+    public function showFeatureAction($user_view_id)
+    {
+        $permission = FeatureActionPermission::where('user_view_id', $user_view_id)->first();
+
+        if (!$permission) {
+            $permission = [
+                'user_view_id' => $user_view_id,
+                'read' => false,
+                'write' => false,
+                'modify' => false,
+                'delete' => false,
+            ];
+        }
+
+        return response()->json([
+            'status' => true,
+            'data' => $permission
+        ]);
+    }
+
+
+    public function updateFeatureAction(Request $request, $user_view_id)
+    {
+        $validated = $request->validate([
+            'read'   => 'nullable|boolean',
+            'write'  => 'nullable|boolean',
+            'modify' => 'nullable|boolean',
+            'delete' => 'nullable|boolean',
+        ]);
+
+        $permission = FeatureActionPermission::updateOrCreate(
+            ['user_view_id' => $user_view_id],
+            [
+                'read'   => $validated['read'] ?? false,
+                'write'  => $validated['write'] ?? false,
+                'modify' => $validated['modify'] ?? false,
+                'delete' => $validated['delete'] ?? false,
+            ]
+        );
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Permission updated successfully',
+            'data' => $permission
+        ]);
+    }
 
 }

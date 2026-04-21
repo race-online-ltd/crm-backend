@@ -15,6 +15,7 @@ use App\Http\Controllers\Settings\SystemAccountConnectionController;
 use App\Http\Controllers\TeamControllers\TeamController;
 use App\Http\Controllers\EntityColumnMappingController;
 use App\Http\Controllers\NavigationItemController;
+use App\Http\Controllers\UserMappingController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -30,6 +31,9 @@ Route::prefix('auth')->group(function (): void {
 Route::middleware('auth:api')->group(function (): void {
 
 
+    Route::post('/feature-action-permissions', [NavigationItemController::class, 'storeFeatureAction']);
+    Route::get('/feature-action-permissions/{user_view_id}', [NavigationItemController::class, 'showFeatureAction']);
+    Route::put('/feature-action-permissions/{user_view_id}', [NavigationItemController::class, 'updateFeatureAction']);
     Route::get('/navigation-items/active', [NavigationItemController::class, 'getActiveItems']);
     Route::get('/navigation-features/{navigation_id}', [NavigationItemController::class, 'getByNavigationId']);
     Route::post('/user-view-permissions', [NavigationItemController::class, 'store']);
@@ -121,17 +125,30 @@ Route::middleware('auth:api')->group(function (): void {
 
     Route::prefix('entity-column-mappings')->group(function () {
 
-    Route::get('/get-navigation-items', [EntityColumnMappingController::class, 'getNavigationItems']);
-    Route::get('/get-table-items', [EntityColumnMappingController::class, 'getTableItems']);
-    Route::get('/get-column-items', [EntityColumnMappingController::class, 'getColumnItems']);
+        Route::get('/get-navigation-items', [EntityColumnMappingController::class, 'getNavigationItems']);
+        Route::get('/get-table-items', [EntityColumnMappingController::class, 'getTableItems']);
+        Route::get('/get-column-items', [EntityColumnMappingController::class, 'getColumnItems']);
+
+        Route::get('/table-column-mappings', [EntityColumnMappingController::class, 'getEntityWisetableColumnMappings']);
 
 
-    Route::get('/', [EntityColumnMappingController::class, 'index']);
-    Route::post('/', [EntityColumnMappingController::class, 'store']);
-    Route::get('/{id}', [EntityColumnMappingController::class, 'show']);
-    Route::put('/{id}', [EntityColumnMappingController::class, 'update']);
-    Route::delete('/{id}', [EntityColumnMappingController::class, 'destroy']);
+        Route::get('/', [EntityColumnMappingController::class, 'index']);
+        Route::post('/', [EntityColumnMappingController::class, 'store']);
+        Route::get('/{id}', [EntityColumnMappingController::class, 'show']);
+        Route::put('/', [EntityColumnMappingController::class, 'update']);
+        // Route::delete('/{id}', [EntityColumnMappingController::class, 'destroy']);
+
+        Route::post('/bulk', [EntityColumnMappingController::class, 'storeBulk']);
+        Route::delete('/{id}', [EntityColumnMappingController::class, 'destroy']);
+        Route::delete('/delete-by-criteria', [EntityColumnMappingController::class, 'destroyByCriteria']);
 
 
-});
+    });
+
+    Route::prefix('user-mappings')->group(function () {
+        Route::post('/clients/by-business-entity', [UserMappingController::class, 'getClientsByBusinessEntity']);
+        Route::get('/divisions', [UserMappingController::class, 'getDivisions']);
+        Route::post('/store', [UserMappingController::class, 'storeUserMappings']);
+        Route::get('/{userId}', [UserMappingController::class, 'getUserMappings']);
+    });
 });

@@ -7,6 +7,7 @@ use App\Http\Controllers\Clients\ClientsController;
 use App\Http\Controllers\Settings\BackofficeController;
 use App\Http\Controllers\Settings\BusinessEntityController;
 use App\Http\Controllers\GroupControllers\GroupController;
+use App\Http\Controllers\Integrations\MeetingRecorderController;
 use App\Http\Controllers\MappingController\MappingController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\KamProductMappingController;
@@ -41,6 +42,7 @@ Route::middleware('auth:api')->group(function (): void {
     Route::get('profile', [ProfileController::class, 'show']);
     Route::put('profile', [ProfileController::class, 'update']);
     Route::put('profile/change-password', [ProfileController::class, 'changePassword']);
+    Route::post('integrations/meeting-recorder/launch', [MeetingRecorderController::class, 'launch']);
 
     Route::prefix('areas')->controller(AreaController::class)->group(function (): void {
         Route::get('/', 'index');

@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\ProfileController;
 use App\Http\Controllers\AreaController\AreaController;
 use App\Http\Controllers\Clients\ClientsController;
+use App\Http\Controllers\TargetController\TargetController;
 use App\Http\Controllers\Settings\BackofficeController;
 use App\Http\Controllers\Settings\BusinessEntityController;
 use App\Http\Controllers\GroupControllers\GroupController;
@@ -158,4 +159,13 @@ Route::middleware('auth:api')->group(function (): void {
 
 
 });
+
+    Route::prefix('target')->controller(TargetController::class)->group(function (): void {
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('/{target}', 'show');
+        Route::put('/{target}', 'update');
+        Route::patch('/{target}', 'update');
+        Route::delete('/{target}', 'destroy');
+    });
 });

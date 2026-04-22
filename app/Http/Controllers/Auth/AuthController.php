@@ -64,7 +64,8 @@ class AuthController extends Controller
     FROM users u
     INNER JOIN roles r ON r.id = u.role_id
     LEFT JOIN role_permissions rp ON rp.role_id = r.id
-    LEFT JOIN permission_actions pa ON pa.id = rp.navigation_permission_id
+    LEFT JOIN navigation_permissions np ON np.id = rp.navigation_permission_id
+    LEFT JOIN permission_actions pa ON pa.id = np.permission_action_id
     WHERE u.id = ?
 ", [$user->id]);
 

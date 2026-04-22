@@ -81,4 +81,5 @@ class User extends Authenticatable implements JWTSubject
             ->unique()
             ->toArray();
     }
+
 }

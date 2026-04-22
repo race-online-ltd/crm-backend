@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'meeting_recorder' => [
+        'url' => env('MEETING_RECORDER_URL'),
+        'api_url' => env('MEETING_RECORDER_API_URL'),
+        'login_path' => env('MEETING_RECORDER_LOGIN_PATH', '/api/v1/auth/login'),
+        'redirect_path' => env('MEETING_RECORDER_REDIRECT_PATH', '/login'),
+        'username' => env('MEETING_RECORDER_USERNAME'),
+        'password' => env('MEETING_RECORDER_PASSWORD'),
+        'shared_bearer_token' => env('MEETING_RECORDER_SHARED_BEARER_TOKEN'),
+    ],
+
 ];

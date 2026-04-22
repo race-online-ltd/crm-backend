@@ -8,9 +8,11 @@ use App\Http\Controllers\TargetController\TargetController;
 use App\Http\Controllers\Settings\BackofficeController;
 use App\Http\Controllers\Settings\BusinessEntityController;
 use App\Http\Controllers\GroupControllers\GroupController;
+use App\Http\Controllers\Integrations\MeetingRecorderController;
 use App\Http\Controllers\MappingController\MappingController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\KamProductMappingController;
+use App\Http\Controllers\Settings\LeadPipelineStageController;
 use App\Http\Controllers\Settings\SettingController;
 use App\Http\Controllers\Settings\SystemAccountConnectionController;
 use App\Http\Controllers\TeamControllers\TeamController;
@@ -62,6 +64,7 @@ Route::middleware('auth:api')->group(function (): void {
     Route::get('profile', [ProfileController::class, 'show']);
     Route::put('profile', [ProfileController::class, 'update']);
     Route::put('profile/change-password', [ProfileController::class, 'changePassword']);
+    Route::post('integrations/meeting-recorder/launch', [MeetingRecorderController::class, 'launch']);
 
     Route::prefix('areas')->controller(AreaController::class)->group(function (): void {
         Route::get('/', 'index');
@@ -127,6 +130,10 @@ Route::middleware('auth:api')->group(function (): void {
         Route::get('/business-entities/{businessEntity}/products', [KamProductMappingController::class, 'products']);
         Route::get('/kam-mappings', [KamProductMappingController::class, 'show']);
         Route::post('/kam-mappings', [KamProductMappingController::class, 'store']);
+
+        Route::get('/lead-pipeline-stages/options', [LeadPipelineStageController::class, 'options']);
+        Route::get('/lead-pipeline-stages', [LeadPipelineStageController::class, 'show']);
+        Route::post('/lead-pipeline-stages', [LeadPipelineStageController::class, 'store']);
 
         Route::get('/external-systems', [SystemAccountConnectionController::class, 'externalSystemsIndex']);
         Route::get('/external-systems/{externalSystem}/users', [SystemAccountConnectionController::class, 'externalSystemUsers']);

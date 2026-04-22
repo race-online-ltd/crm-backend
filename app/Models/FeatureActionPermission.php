@@ -5,24 +5,19 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class UserViewPermission extends Model
+class FeatureActionPermission extends Model
 {
-
     use HasFactory;
 
-
-    protected $table = 'user_view_permissions';
+    protected $table = 'feature_action_permissions';
 
     protected $fillable = [
-        'role_id',
-        'navigation_id',
-        'feature_id',
+        'user_view_id',
         'read',
         'write',
         'modify',
         'delete',
     ];
-
 
     protected $casts = [
         'read' => 'boolean',
@@ -30,4 +25,12 @@ class UserViewPermission extends Model
         'modify' => 'boolean',
         'delete' => 'boolean',
     ];
+
+    /**
+     * Relationship (assuming user_view_id refers to another table)
+     */
+    public function userView()
+    {
+        return $this->belongsTo(UserViewPermission::class, 'user_view_id');
+    }
 }

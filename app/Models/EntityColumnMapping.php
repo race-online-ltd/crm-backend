@@ -6,6 +6,10 @@ use Illuminate\Database\Eloquent\Model;
 
 class EntityColumnMapping extends Model
 {
+
+
+    protected $table = 'entity_column_mappings';
+    
     protected $fillable = [
         'entity_id',
         'page_id',

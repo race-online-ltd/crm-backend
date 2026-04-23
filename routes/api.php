@@ -21,6 +21,249 @@ use App\Http\Controllers\NavigationItemController;
 use App\Http\Controllers\UserMappingController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
+use Webklex\IMAP\Facades\Client;
+use Illuminate\Support\Facades\Mail;
+use Symfony\Component\Mime\Email;
+use Symfony\Component\Mailer\Transport;
+use Symfony\Component\Mailer\Mailer;
+
+
+function extractCleanText(?string $html, ?string $plain): string
+{
+    // ✅ Plain আগে check করো — সবচেয়ে accurate
+    if ($plain && trim($plain) !== '') {
+        $text = $plain;
+    } elseif ($html && trim($html) !== '') {
+        // Plain নেই → HTML থেকে extract করো
+        $text = preg_replace('/<(br\s*\/?|\/p|\/div|\/li|\/tr)\s*>/i', "\n", $html);
+        $text = strip_tags($text);
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    } else {
+        return '';
+    }
+
+    // ✅ Normalize newline
+    $text = str_replace(["\r\n", "\r"], "\n", $text);
+
+    // ✅ Remove quoted lines (>)
+    $lines = explode("\n", $text);
+    $lines = array_filter($lines, fn($l) => !preg_match('/^\s*>/', $l));
+    $text  = implode("\n", $lines);
+
+    // ✅ Remove reply thread
+    $text = preg_split('/\nOn .+?wrote:/si', $text)[0];
+
+    // ✅ Remove forwarded mail
+    $text = preg_split('/\nFrom:\s+[^\n]+\nSent:/i', $text)[0];
+
+    // ✅ Remove unsubscribe footer
+    $text = preg_split('/\nTo unsubscribe from this group/i', $text)[0];
+
+    // ✅ Remove common signatures
+    $text = preg_split('/\nRegards,|\nBest regards,|\nThanks & Regards/i', $text)[0];
+
+    // ✅ Remove mobile signature
+    $text = preg_split('/\nSent from my/i', $text)[0];
+
+    // ✅ Remove markdown-style *text*
+    $text = preg_replace('/\*(.*?)\*/', '$1', $text);
+
+    // ✅ Remove remaining standalone *
+    $text = str_replace('*', '', $text);
+
+    // ✅ Normalize spaces & tabs
+    $text = preg_replace('/[ \t]+/', ' ', $text);
+
+    // ✅ Normalize multiple newlines
+    $text = preg_replace('/\n{2,}/', "\n", $text);
+
+    // ✅ Trim each line
+    $lines = array_map('trim', explode("\n", $text));
+    $text  = implode("\n", $lines);
+
+    return trim(preg_replace('/\s+/', ' ', $text));
+}
+
+
+
+Route::get('/test-imap', function () {
+
+
+    $client = Client::account('default');
+    $client->connect();
+    $folder = $client->getFolder('INBOX');
+
+    $messages = $folder->messages()
+        ->seen()
+        ->setFetchOrder('desc')
+        ->limit(1)
+        ->get();
+
+    $results = [];
+
+    foreach ($messages as $message) {
+
+        $uid     = $message->getUid();
+        $from    = $message->getFrom()[0]->mail ?? null;
+        $name    = trim($message->getFrom()[0]->personal ?? '', '"');
+        $subject = $message->getSubject()->toString();
+        $date    = $message->getDate()->first();
+
+        // ✅ Message ID fix (VERY IMPORTANT)
+        $messageId = $message->getMessageId()?->toString();
+        $messageId = $messageId ? '<' . trim($messageId, '<>') . '>' : null;
+
+        // optional
+        $inReplyTo = $message->getInReplyTo();
+        $inReplyTo = $inReplyTo ? $inReplyTo[0] : null;
+
+        $html  = $message->getHTMLBody();
+        $plain = $message->getTextBody();
+
+        // ✅ fallback HTML
+        if (!$html && $plain) {
+            $html = '<pre style="font-family:inherit;white-space:pre-wrap;">'
+                  . htmlspecialchars($plain, ENT_QUOTES, 'UTF-8')
+                  . '</pre>';
+        }
+
+        // ✅ clean text
+        $text = extractCleanText($html, $plain);
+
+
+
+        // =========================
+        // 🔁 AUTO REPLY
+        // =========================
+        $replySubject = str_starts_with($subject, 'Re:')
+            ? $subject
+            : 'Re: ' . $subject;
+
+        $greeting = $name ? "Dear $name," : "Dear Sir/Madam,";
+
+        $replyMessage = "$greeting\n\nThank you for your email. We have received your message.\n\nBest regards.";
+
+        // 🔥 NEW UNIQUE MESSAGE-ID (VERY IMPORTANT)
+
+
+
+// =====================
+
+$messageId = trim($messageId, '<>');
+$newMessageId = bin2hex(random_bytes(16)) . '@race.net.bd';
+
+Mail::send([], [], function ($mail) use ($from, $replySubject, $replyMessage, $messageId) {
+
+    $mail->to($from)
+         ->subject($replySubject);
+
+    // body
+    $mail->text($replyMessage);
+
+    // 🔥 CORRECT WAY TO ADD HEADERS
+    $headers = $mail->getSymfonyMessage()->getHeaders();
+
+    $headers->addTextHeader('In-Reply-To', $messageId);
+    $headers->addTextHeader('References', $messageId);
+});
+
+        $message->setFlag('Seen');
+
+        $results[] = [
+            'uid'        => $uid,
+            'from'       => $from,
+            'name'       => $name,
+            'subject'    => $subject,
+            'date'       => $date,
+            'message_id' => $messageId,
+            'text'       => $text,
+        ];
+    }
+
+    return response()->json($results);
+});
+
+// Route::get('/test-imap', function () {
+
+//     $client = Client::account('default');
+//     $client->connect();
+//     $folder = $client->getFolder('INBOX');
+
+//     $messages = $folder->messages()
+//         ->seen()
+//         ->setFetchOrder('desc')
+//         ->limit(1)
+//         ->get();
+
+//     $results = [];
+
+//     foreach ($messages as $message) {
+
+//         $uid     = $message->getUid();
+//         $from    = $message->getFrom()[0]->mail ?? null;
+//         $name    = trim($message->getFrom()[0]->personal ?? '', '"');
+//         $subject = $message->getSubject()->toString();
+//         $date    = $message->getDate()->first();
+
+//         $html  = $message->getHTMLBody();
+//         $plain = $message->getTextBody();
+
+//         // ✅ HTML — plain নেই হলে wrap করো
+//         if (!$html && $plain) {
+//             $html = '<pre style="font-family:inherit;white-space:pre-wrap;">'
+//                   . htmlspecialchars($plain, ENT_QUOTES, 'UTF-8')
+//                   . '</pre>';
+//         }
+
+//         // ✅ Clean text + preview
+//         $text    = extractCleanText($html, $plain);
+
+//         // // ✅ DB Insert
+//         // $exists = DB::table('emails')->where('uid', $uid)->exists();
+
+//         // if (!$exists) {
+//         //     DB::table('emails')->insert([
+//         //         'uid'          => $uid,
+//         //         'from_email'   => $from,
+//         //         'from_name'    => $name,
+//         //         'subject'      => $subject,
+//         //         'body_html'    => $html,     // display
+//         //         'body_text'    => $text,     // AI / search
+//         //         'status'       => 'unread',
+//         //         'received_at'  => $date,
+//         //         'created_at'   => now(),
+//         //         'updated_at'   => now(),
+//         //     ]);
+//         // }
+
+
+
+//     $replyMessage = "Dear Sir,\n\nYour email has been received.\n\nBest regards.";
+
+
+
+//         Mail::raw($replyMessage, function ($mail) use ($from, $subject) {
+//             $mail->to($from)
+//                  ->subject('Re: ' . $subject);
+//         });
+
+//         $message->setFlag('Seen');
+
+//         $results[] = [
+//             'uid'     => $uid,
+//             'from'    => $from,
+//             'name'    => $name,
+//             'subject' => $subject,
+//             'date'    => $date,
+//             // 'html'    => $html,    // detail view এ React render
+//             'text'    => $text,    // AI / WhatsApp forward
+//             // 'saved'   => !$exists,
+//         ];
+//     }
+
+//     return response()->json($results);
+// });
+
 
 Route::prefix('system')->group(function (): void {
 

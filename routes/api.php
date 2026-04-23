@@ -17,6 +17,8 @@ use App\Http\Controllers\Settings\SettingController;
 use App\Http\Controllers\Settings\SystemAccountConnectionController;
 use App\Http\Controllers\TeamControllers\TeamController;
 use App\Http\Controllers\EntityColumnMappingController;
+use App\Http\Controllers\LeadController;
+use App\Http\Controllers\TaskController;
 use App\Http\Controllers\NavigationItemController;
 use App\Http\Controllers\UserMappingController;
 use Illuminate\Support\Facades\Route;
@@ -184,6 +186,29 @@ Route::middleware('auth:api')->group(function (): void {
         Route::put('/{target}', 'update');
         Route::patch('/{target}', 'update');
         Route::delete('/{target}', 'destroy');
+    });
+
+    Route::prefix('leads')->controller(LeadController::class)->group(function (): void {
+        Route::get('/options', 'options');
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('/{lead}', 'show');
+        Route::put('/{lead}', 'update');
+        Route::patch('/{lead}', 'update');
+        Route::delete('/{lead}', 'destroy');
+    });
+
+    Route::prefix('tasks')->controller(TaskController::class)->group(function (): void {
+        Route::get('/options', 'options');
+        Route::get('/', 'index');
+        Route::post('/', 'store');
+        Route::get('/{task}', 'show');
+        Route::put('/{task}', 'update');
+        Route::patch('/{task}', 'update');
+        Route::post('/{task}/check-in', 'checkIn');
+        Route::post('/{task}/complete', 'complete');
+        Route::post('/{task}/cancel', 'cancel');
+        Route::delete('/{task}', 'destroy');
     });
 
     Route::prefix('user-mappings')->group(function () {

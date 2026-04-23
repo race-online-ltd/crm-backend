@@ -1,0 +1,336 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\BusinessEntity;
+use App\Models\Client;
+use App\Models\Lead;
+use App\Models\LeadAttachment;
+use App\Models\LeadPipelineStage;
+use App\Models\Product;
+use App\Models\Source;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+
+class LeadController extends Controller
+{
+    public function options(Request $request): JsonResponse
+    {
+        $businessEntityId = $request->integer('business_entity_id');
+
+        $businessEntities = BusinessEntity::query()
+            ->where('status', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (BusinessEntity $businessEntity) => [
+                'id' => (string) $businessEntity->id,
+                'label' => $businessEntity->name,
+            ])
+            ->values();
+
+        $sources = Source::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Source $source) => [
+                'id' => (string) $source->id,
+                'label' => $source->name,
+            ])
+            ->values();
+
+        $clients = Client::query()
+            ->orderBy('client_name')
+            ->get(['id', 'client_name'])
+            ->map(fn (Client $client) => [
+                'id' => (string) $client->id,
+                'label' => $client->client_name,
+            ])
+            ->values();
+
+        $products = Product::query()
+            ->when($businessEntityId > 0, fn ($query) => $query->where('business_entity_id', $businessEntityId))
+            ->orderBy('product_name')
+            ->get(['id', 'product_name', 'business_entity_id'])
+            ->map(fn (Product $product) => [
+                'id' => (string) $product->id,
+                'label' => $product->product_name,
+                'business_entity_id' => $product->business_entity_id,
+            ])
+            ->values();
+
+        $stages = LeadPipelineStage::query()
+            ->when($businessEntityId > 0, fn ($query) => $query->where('business_entity_id', $businessEntityId))
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get(['id', 'business_entity_id', 'stage_name', 'color'])
+            ->map(fn (LeadPipelineStage $stage) => [
+                'id' => (string) $stage->id,
+                'label' => $stage->stage_name,
+                'business_entity_id' => $stage->business_entity_id,
+                'color' => $stage->color,
+            ])
+            ->values();
+
+        return response()->json([
+            'message' => 'Lead form options fetched successfully.',
+            'data' => [
+                'business_entities' => $businessEntities,
+                'sources' => $sources,
+                'clients' => $clients,
+                'products' => $products,
+                'stages' => $stages,
+            ],
+        ]);
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        $leads = Lead::query()
+            ->with([
+                'businessEntity:id,name',
+                'source:id,name',
+                'client:id,client_name',
+                'stage:id,stage_name,color',
+                'products:id,product_name',
+                'attachments:id,lead_id,file_name,file_path,mime_type,file_size',
+                'creator:id,full_name,user_name',
+                'updater:id,full_name,user_name',
+            ])
+            ->latest()
+            ->get()
+            ->map(fn (Lead $lead) => $this->transformLead($lead))
+            ->values();
+
+        return response()->json([
+            'message' => 'Leads fetched successfully.',
+            'data' => $leads,
+        ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        [$validated, $attachments] = $this->validateLeadRequest($request);
+
+        $lead = DB::transaction(function () use ($validated, $attachments, $request): Lead {
+            $lead = Lead::create([
+                'business_entity_id' => $validated['business_entity_id'],
+                'source_id' => $validated['source_id'],
+                'client_id' => $validated['client_id'],
+                'lead_pipeline_stage_id' => $validated['lead_pipeline_stage_id'],
+                'expected_revenue' => $validated['expected_revenue'] ?? null,
+                'deadline' => $validated['deadline'] ?? null,
+                'created_by' => $request->user()?->id,
+                'updated_by' => $request->user()?->id,
+            ]);
+
+            $lead->products()->sync($validated['product_ids']);
+            $this->storeAttachments($lead, $attachments);
+
+            return $lead->load($this->leadRelations());
+        });
+
+        return response()->json([
+            'message' => 'Lead created successfully.',
+            'data' => $this->transformLead($lead),
+        ], 201);
+    }
+
+    public function show(Lead $lead): JsonResponse
+    {
+        $lead->load($this->leadRelations());
+
+        return response()->json([
+            'message' => 'Lead fetched successfully.',
+            'data' => $this->transformLead($lead),
+        ]);
+    }
+
+    public function update(Request $request, Lead $lead): JsonResponse
+    {
+        [$validated, $attachments] = $this->validateLeadRequest($request, $lead->id);
+
+        $lead = DB::transaction(function () use ($lead, $validated, $attachments, $request): Lead {
+            $lead->update([
+                'business_entity_id' => $validated['business_entity_id'],
+                'source_id' => $validated['source_id'],
+                'client_id' => $validated['client_id'],
+                'lead_pipeline_stage_id' => $validated['lead_pipeline_stage_id'],
+                'expected_revenue' => $validated['expected_revenue'] ?? null,
+                'deadline' => $validated['deadline'] ?? null,
+                'updated_by' => $request->user()?->id,
+            ]);
+
+            $lead->products()->sync($validated['product_ids']);
+            $this->storeAttachments($lead, $attachments, true);
+
+            return $lead->load($this->leadRelations());
+        });
+
+        return response()->json([
+            'message' => 'Lead updated successfully.',
+            'data' => $this->transformLead($lead),
+        ]);
+    }
+
+    public function destroy(Lead $lead): JsonResponse
+    {
+        $lead->delete();
+
+        return response()->json([
+            'message' => 'Lead deleted successfully.',
+        ]);
+    }
+
+    private function validateLeadRequest(Request $request, ?int $leadId = null): array
+    {
+        $payload = $this->normalizeLeadPayload($request);
+
+        $validated = validator($payload, [
+            'business_entity_id' => ['required', 'integer', Rule::exists('business_entities', 'id')],
+            'source_id' => ['required', 'integer', Rule::exists('sources', 'id')],
+            'client_id' => ['required', 'integer', Rule::exists('clients', 'id')],
+            'lead_pipeline_stage_id' => [
+                'required',
+                'integer',
+                Rule::exists('lead_pipeline_stages', 'id'),
+            ],
+            'product_ids' => ['required', 'array', 'min:1'],
+            'product_ids.*' => ['required', 'integer', 'distinct', Rule::exists('product', 'id')],
+            'expected_revenue' => ['nullable', 'numeric', 'min:0'],
+            'deadline' => ['nullable', 'date'],
+            'attachments' => ['nullable', 'array'],
+        ])->validate();
+
+        $stageBelongs = LeadPipelineStage::query()
+            ->where('id', $validated['lead_pipeline_stage_id'])
+            ->where('business_entity_id', $validated['business_entity_id'])
+            ->exists();
+
+        if (! $stageBelongs) {
+            abort(response()->json([
+                'message' => 'Selected stage does not belong to the selected business entity.',
+            ], 422));
+        }
+
+        $productBelongs = Product::query()
+            ->whereIn('id', $validated['product_ids'])
+            ->where('business_entity_id', $validated['business_entity_id'])
+            ->count();
+
+        if ($productBelongs !== count($validated['product_ids'])) {
+            abort(response()->json([
+                'message' => 'One or more selected products do not belong to the selected business entity.',
+            ], 422));
+        }
+
+        return [$validated, $this->extractUploadedFiles($request)];
+    }
+
+    private function normalizeLeadPayload(Request $request): array
+    {
+        $payload = $request->all();
+
+        foreach (['product_ids', 'attachments'] as $key) {
+            if (is_string($payload[$key] ?? null)) {
+                $decoded = json_decode($payload[$key], true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $payload[$key] = $decoded;
+                }
+            }
+        }
+
+        return [
+            'business_entity_id' => (int) ($payload['business_entity_id'] ?? 0),
+            'source_id' => (int) ($payload['source_id'] ?? 0),
+            'client_id' => (int) ($payload['client_id'] ?? 0),
+            'lead_pipeline_stage_id' => (int) ($payload['lead_pipeline_stage_id'] ?? 0),
+            'product_ids' => array_values(array_filter(array_map('intval', (array) ($payload['product_ids'] ?? [])))),
+            'expected_revenue' => isset($payload['expected_revenue']) && $payload['expected_revenue'] !== ''
+                ? $payload['expected_revenue']
+                : null,
+            'deadline' => $payload['deadline'] ?? null,
+            'attachments' => $payload['attachments'] ?? [],
+        ];
+    }
+
+    private function extractUploadedFiles(Request $request): array
+    {
+        $files = $request->file('attachment');
+
+        if (! $files) {
+            return [];
+        }
+
+        return is_array($files) ? $files : [$files];
+    }
+
+    private function storeAttachments(Lead $lead, array $files, bool $replace = false): void
+    {
+        if ($replace && $files !== []) {
+            $lead->attachments()->delete();
+        }
+
+        foreach ($files as $file) {
+            $path = $file->store('lead-attachments', 'public');
+
+            LeadAttachment::create([
+                'lead_id' => $lead->id,
+                'file_name' => $file->getClientOriginalName(),
+                'file_path' => $path,
+                'mime_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+            ]);
+        }
+    }
+
+    private function leadRelations(): array
+    {
+        return [
+            'businessEntity:id,name',
+            'source:id,name',
+            'client:id,client_name',
+            'stage:id,stage_name,color',
+            'products:id,product_name',
+            'attachments:id,lead_id,file_name,file_path,mime_type,file_size',
+            'creator:id,full_name,user_name',
+            'updater:id,full_name,user_name',
+        ];
+    }
+
+    private function transformLead(Lead $lead): array
+    {
+        return [
+            'id' => $lead->id,
+            'business_entity_id' => $lead->business_entity_id,
+            'business_entity' => $lead->businessEntity?->name,
+            'source_id' => $lead->source_id,
+            'source' => $lead->source?->name,
+            'client_id' => $lead->client_id,
+            'client' => $lead->client?->client_name,
+            'lead_pipeline_stage_id' => $lead->lead_pipeline_stage_id,
+            'stage' => $lead->stage?->stage_name,
+            'expected_revenue' => $lead->expected_revenue,
+            'deadline' => $lead->deadline,
+            'product_ids' => $lead->products?->pluck('id')->values()->all() ?? [],
+            'products' => $lead->products?->map(fn (Product $product) => [
+                'id' => $product->id,
+                'label' => $product->product_name,
+            ])->values()->all() ?? [],
+            'attachment' => $lead->attachments?->map(fn (LeadAttachment $attachment) => [
+                'id' => $attachment->id,
+                'file_name' => $attachment->file_name,
+                'file_path' => $attachment->file_path,
+                'mime_type' => $attachment->mime_type,
+                'file_size' => $attachment->file_size,
+            ])->values()->all() ?? [],
+            'created_by' => $lead->creator?->full_name ?? $lead->creator?->user_name,
+            'updated_by' => $lead->updater?->full_name ?? $lead->updater?->user_name,
+            'created_at' => $lead->created_at,
+            'updated_at' => $lead->updated_at,
+            'deleted_at' => $lead->deleted_at,
+        ];
+    }
+}

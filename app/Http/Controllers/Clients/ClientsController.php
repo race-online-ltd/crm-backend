@@ -19,8 +19,25 @@ class ClientsController extends Controller
         $divisionId = $request->integer('division_id');
         $contactPerson = trim((string) $request->input('contact_person', ''));
         $licence = trim((string) $request->input('licence', ''));
+        $sortBy = (string) $request->input('sort_by', 'created_at');
+        $sortDirection = strtolower((string) $request->input('sort_direction', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+        $baseSortColumns = [
+            'client_name' => 'clients.client_name',
+            'origin' => 'clients.origin',
+            'origin_id' => 'clients.origin_id',
+            'contact_person' => 'clients.contact_person',
+            'contact_no' => 'clients.contact_no',
+            'email' => 'clients.email',
+            'address' => 'clients.address',
+            'licence' => 'clients.licence',
+            'status' => 'clients.status',
+            'created_at' => 'clients.created_at',
+            'updated_at' => 'clients.updated_at',
+        ];
 
         $query = Client::query()
+            ->select('clients.*')
             ->with($this->clientRelations())
             ->when($businessEntityId > 0, function ($query) use ($businessEntityId): void {
                 $query->where('business_entity_id', $businessEntityId);
@@ -36,8 +53,27 @@ class ClientsController extends Controller
             })
             ->when($licence !== '', function ($query) use ($licence): void {
                 $query->where('licence', $licence);
-            })
-            ->latest();
+            });
+
+        if ($sortBy === 'business_entity_name') {
+            $query
+                ->leftJoin('business_entities', 'business_entities.id', '=', 'clients.business_entity_id')
+                ->orderBy('business_entities.name', $sortDirection);
+        } elseif ($sortBy === 'division_name') {
+            $query
+                ->leftJoin('divisions', 'divisions.id', '=', 'clients.division_id')
+                ->orderBy('divisions.name', $sortDirection);
+        } elseif ($sortBy === 'district_name') {
+            $query
+                ->leftJoin('districts', 'districts.id', '=', 'clients.district_id')
+                ->orderBy('districts.name', $sortDirection);
+        } elseif ($sortBy === 'thana_name') {
+            $query
+                ->leftJoin('thanas', 'thanas.id', '=', 'clients.thana_id')
+                ->orderBy('thanas.name', $sortDirection);
+        } else {
+            $query->orderBy($baseSortColumns[$sortBy] ?? 'clients.created_at', $sortDirection);
+        }
 
         $paginator = $query
             ->paginate($perPage)

@@ -12,6 +12,7 @@ use App\Http\Controllers\Integrations\MeetingRecorderController;
 use App\Http\Controllers\MappingController\MappingController;
 use App\Http\Controllers\Settings\RoleController;
 use App\Http\Controllers\Settings\KamProductMappingController;
+use App\Http\Controllers\Settings\ApprovalPipelineStepController;
 use App\Http\Controllers\Settings\LeadPipelineStageController;
 use App\Http\Controllers\Settings\SettingController;
 use App\Http\Controllers\Settings\SystemAccountConnectionController;
@@ -137,6 +138,10 @@ Route::middleware('auth:api')->group(function (): void {
         Route::get('/lead-pipeline-stages', [LeadPipelineStageController::class, 'show']);
         Route::post('/lead-pipeline-stages', [LeadPipelineStageController::class, 'store']);
 
+        Route::get('/approval-pipeline-steps/options', [ApprovalPipelineStepController::class, 'options']);
+        Route::get('/approval-pipeline-steps', [ApprovalPipelineStepController::class, 'show']);
+        Route::post('/approval-pipeline-steps', [ApprovalPipelineStepController::class, 'store']);
+
         Route::get('/external-systems', [SystemAccountConnectionController::class, 'externalSystemsIndex']);
         Route::get('/external-systems/{externalSystem}/users', [SystemAccountConnectionController::class, 'externalSystemUsers']);
         Route::get('/users/{systemUser}/external-account-connections', [SystemAccountConnectionController::class, 'showUserConnections']);
@@ -203,11 +208,13 @@ Route::middleware('auth:api')->group(function (): void {
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{task}', 'show');
+        Route::get('/note-attachments/{taskNoteAttachment}', 'downloadNoteAttachment');
         Route::put('/{task}', 'update');
         Route::patch('/{task}', 'update');
         Route::post('/{task}/check-in', 'checkIn');
         Route::post('/{task}/complete', 'complete');
         Route::post('/{task}/cancel', 'cancel');
+        Route::post('/{task}/notes', 'storeNote');
         Route::delete('/{task}', 'destroy');
     });
 

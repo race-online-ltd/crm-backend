@@ -27,6 +27,7 @@ class Task extends Model
         'location_latitude',
         'location_longitude',
         'reminder_enabled',
+        'reminder_at',
         'reminder_offset_minutes',
         'checked_in_at',
         'checked_in_latitude',
@@ -50,6 +51,7 @@ class Task extends Model
         'location_latitude' => 'decimal:7',
         'location_longitude' => 'decimal:7',
         'reminder_enabled' => 'boolean',
+        'reminder_at' => 'datetime',
         'reminder_offset_minutes' => 'integer',
         'checked_in_at' => 'datetime',
         'checked_in_latitude' => 'decimal:7',
@@ -95,5 +97,10 @@ class Task extends Model
     public function attachments(): HasMany
     {
         return $this->hasMany(TaskAttachment::class, 'task_id');
+    }
+
+    public function notes(): HasMany
+    {
+        return $this->hasMany(TaskNote::class, 'task_id')->orderByDesc('created_at');
     }
 }

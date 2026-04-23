@@ -6,6 +6,8 @@ use App\Models\Client;
 use App\Models\Lead;
 use App\Models\Task;
 use App\Models\TaskAttachment;
+use App\Models\TaskNote;
+use App\Models\TaskNoteAttachment;
 use App\Models\TaskReminderChannel;
 use App\Models\TaskType;
 use App\Models\User;
@@ -13,6 +15,7 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -135,6 +138,7 @@ class TaskController extends Controller
                 'location_latitude' => $validated['location_latitude'] ?? null,
                 'location_longitude' => $validated['location_longitude'] ?? null,
                 'reminder_enabled' => (bool) $validated['reminder_enabled'],
+                'reminder_at' => $validated['reminder_at'] ?? null,
                 'reminder_offset_minutes' => $validated['reminder_offset_minutes'] ?? null,
                 'updated_by' => $request->user()?->id,
             ]);
@@ -180,6 +184,7 @@ class TaskController extends Controller
                 'location_latitude' => $validated['location_latitude'] ?? null,
                 'location_longitude' => $validated['location_longitude'] ?? null,
                 'reminder_enabled' => (bool) $validated['reminder_enabled'],
+                'reminder_at' => $validated['reminder_at'] ?? null,
                 'reminder_offset_minutes' => $validated['reminder_offset_minutes'] ?? null,
                 'updated_by' => $request->user()?->id,
             ]);
@@ -287,6 +292,53 @@ class TaskController extends Controller
         ]);
     }
 
+    public function storeNote(Request $request, Task $task): JsonResponse
+    {
+        $validated = validator($this->normalizeNotePayload($request), [
+            'content' => ['required', 'string', 'max:5000'],
+            'attachments' => ['nullable', 'array'],
+            'attachments.*' => ['file', 'max:10240'],
+        ])->validate();
+
+        $note = DB::transaction(function () use ($task, $validated, $request): TaskNote {
+            $note = TaskNote::create([
+                'task_id' => $task->id,
+                'created_by_user_id' => $request->user()?->id,
+                'content' => $validated['content'],
+            ]);
+
+            $this->storeNoteAttachments($note, $this->extractNoteUploadedFiles($request));
+
+            return $note->load(['createdByUser:id,full_name,user_name', 'attachments:id,task_note_id,file_name,file_path,mime_type,file_size']);
+        });
+
+        return response()->json([
+            'message' => 'Task note added successfully.',
+            'data' => [
+                'note' => $this->transformTaskNote($note),
+                'task' => $this->transformTask($task->fresh()->load($this->taskRelations())),
+            ],
+        ], 201);
+    }
+
+    public function downloadNoteAttachment(TaskNoteAttachment $taskNoteAttachment)
+    {
+        $taskNoteAttachment->loadMissing('note.task');
+
+        $path = $taskNoteAttachment->file_path;
+        if (! $path || ! Storage::disk('public')->exists($path)) {
+            abort(404);
+        }
+
+        return response()->download(
+            Storage::disk('public')->path($path),
+            $taskNoteAttachment->file_name,
+            array_filter([
+                'Content-Type' => $taskNoteAttachment->mime_type,
+            ]),
+        );
+    }
+
     private function validateTaskRequest(Request $request, ?int $taskId = null): array
     {
         $payload = $this->normalizeTaskPayload($request);
@@ -304,6 +356,7 @@ class TaskController extends Controller
             'location_latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'location_longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'reminder_enabled' => ['sometimes', 'boolean'],
+            'reminder_at' => ['nullable', 'date', 'before_or_equal:scheduled_at'],
             'reminder_offset_minutes' => ['nullable', 'integer', 'min:1'],
             'reminder_channels' => ['nullable', 'array'],
             'reminder_channels.*' => ['required', 'string', Rule::in(['google_calendar', 'sms'])],
@@ -363,11 +416,36 @@ class TaskController extends Controller
             'location_longitude' => $location['longitude'] ?? null,
             'status' => $payload['status'] ?? 'pending',
             'reminder_enabled' => filter_var($payload['reminder_enabled'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'reminder_at' => $this->normalizeReminderAt($payload),
             'reminder_offset_minutes' => isset($payload['reminder_offset_minutes']) && $payload['reminder_offset_minutes'] !== ''
                 ? (int) $payload['reminder_offset_minutes']
                 : null,
             'reminder_channels' => array_values(array_filter((array) ($payload['reminder_channels'] ?? ($reminder['channels'] ?? [])))),
         ];
+    }
+
+    private function normalizeReminderAt(array $payload): ?string
+    {
+        $reminderAt = $payload['reminder_at'] ?? ($payload['reminder']['dateTime'] ?? ($payload['reminderAt'] ?? null));
+        if (is_string($reminderAt) && trim($reminderAt) !== '') {
+            return $reminderAt;
+        }
+
+        if (
+            isset($payload['reminder_offset_minutes'])
+            && $payload['reminder_offset_minutes'] !== ''
+            && ! empty($payload['scheduled_at'])
+        ) {
+            try {
+                return Carbon::parse($payload['scheduled_at'])
+                    ->subMinutes((int) $payload['reminder_offset_minutes'])
+                    ->toDateTimeString();
+            } catch (\Throwable) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     private function extractUploadedFiles(Request $request): array
@@ -400,6 +478,21 @@ class TaskController extends Controller
         }
     }
 
+    private function storeNoteAttachments(TaskNote $note, array $files): void
+    {
+        foreach ($files as $file) {
+            $path = $file->store('task-note-attachments', 'public');
+
+            TaskNoteAttachment::create([
+                'task_note_id' => $note->id,
+                'file_name' => $file->getClientOriginalName(),
+                'file_path' => $path,
+                'mime_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+            ]);
+        }
+    }
+
     private function syncReminderChannels(Task $task, array $channels): void
     {
         foreach (array_values(array_unique($channels)) as $channel) {
@@ -422,6 +515,8 @@ class TaskController extends Controller
             'taskType:id,name',
             'reminderChannels:id,task_id,channel',
             'attachments:id,task_id,file_name,file_path,mime_type,file_size',
+            'notes.createdByUser:id,full_name,user_name',
+            'notes.attachments:id,task_note_id,file_name,file_path,mime_type,file_size',
         ];
     }
 
@@ -454,6 +549,8 @@ class TaskController extends Controller
             ] : null,
             'status' => $status,
             'reminderEnabled' => (bool) $task->reminder_enabled,
+            'reminderAt' => $this->resolveReminderAt($task)?->toIso8601String(),
+            'reminder_at' => $this->resolveReminderAt($task)?->toIso8601String(),
             'reminderOffsetMinutes' => $task->reminder_offset_minutes,
             'reminderChannels' => $task->reminderChannels?->pluck('channel')->values()->all() ?? [],
             'checked_in_at' => $task->checked_in_at,
@@ -473,6 +570,7 @@ class TaskController extends Controller
                 'mime_type' => $attachment->mime_type,
                 'file_size' => $attachment->file_size,
             ])->values()->all() ?? [],
+            'notes' => $task->notes?->map(fn (TaskNote $note) => $this->transformTaskNote($note))->values()->all() ?? [],
             'created_at' => $task->created_at,
             'updated_at' => $task->updated_at,
             'deleted_at' => $task->deleted_at,
@@ -490,6 +588,46 @@ class TaskController extends Controller
     {
         return [
             'cancellation_reason' => $request->input('cancellation_reason', $request->input('cancellationReason')),
+        ];
+    }
+
+    private function normalizeNotePayload(Request $request): array
+    {
+        return [
+            'content' => trim((string) $request->input('content', $request->input('noteText'))),
+        ];
+    }
+
+    private function extractNoteUploadedFiles(Request $request): array
+    {
+        $files = $request->file('attachments');
+
+        if (! $files) {
+            return [];
+        }
+
+        return is_array($files) ? $files : [$files];
+    }
+
+    private function transformTaskNote(TaskNote $note): array
+    {
+        return [
+            'id' => $note->id,
+            'task_id' => $note->task_id,
+            'author' => $note->createdByUser?->full_name ?? $note->createdByUser?->user_name ?? 'System User',
+            'createdByUserName' => $note->createdByUser?->full_name ?? $note->createdByUser?->user_name,
+            'content' => $note->content,
+            'attachments' => $note->attachments?->map(fn (TaskNoteAttachment $attachment) => [
+                'id' => $attachment->id,
+                'name' => $attachment->file_name,
+                'file_name' => $attachment->file_name,
+                'file_path' => $attachment->file_path,
+                'mime_type' => $attachment->mime_type,
+                'file_size' => $attachment->file_size,
+                'download_url' => '/tasks/note-attachments/'.$attachment->id,
+            ])->values()->all() ?? [],
+            'createdAt' => $note->created_at,
+            'updatedAt' => $note->updated_at,
         ];
     }
 
@@ -521,6 +659,19 @@ class TaskController extends Controller
             'call' => 'call',
             default => str_replace([' ', '-'], '_', $normalized),
         };
+    }
+
+    private function resolveReminderAt(Task $task): ?Carbon
+    {
+        if ($task->reminder_at) {
+            return Carbon::parse($task->reminder_at);
+        }
+
+        if ($task->scheduled_at && $task->reminder_offset_minutes !== null) {
+            return Carbon::parse($task->scheduled_at)->subMinutes((int) $task->reminder_offset_minutes);
+        }
+
+        return null;
     }
 
     private function taskIndexQuery(array $filters)

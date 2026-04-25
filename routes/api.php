@@ -374,6 +374,7 @@ Route::middleware('auth:api')->group(function (): void {
 
         Route::get('/kam-mappings/options', [KamProductMappingController::class, 'options']);
         Route::get('/business-entities/{businessEntity}/products', [KamProductMappingController::class, 'products']);
+        Route::get('/kam-mappings/list', [KamProductMappingController::class, 'index']);
         Route::get('/kam-mappings', [KamProductMappingController::class, 'show']);
         Route::post('/kam-mappings', [KamProductMappingController::class, 'store']);
 

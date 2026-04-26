@@ -21,40 +21,38 @@ class StoreSensorFaultJob implements ShouldQueue
     }
 
     public function handle(): void
-{
-    $insertData = [];
+    {
+        $insertData = [];
 
-    foreach ($this->sensors as $sensor) {
+       foreach ($this->sensors as $sensor) {
 
-        $sensorId = $sensor['sensor_id'];
-        $value = $sensor['value'];
-        $alarmTime = $sensor['alarm_time'];
+    $sensorId = $sensor['sensor_id'];
+    $value = $sensor['value'];
+    $alarmTime = $sensor['alarm_time'];
 
-        // 🔥 convert time
-        $formattedTime = Carbon::parse($alarmTime)
-            ->timezone('Asia/Dhaka')
-            ->format('Y-m-d H:i:s');
+    $formattedTime = Carbon::parse($alarmTime)
+        ->timezone('Asia/Dhaka')
+        ->format('Y-m-d H:i:s');
 
-        // 🔥 last value check
-        $lastRecord = DB::table('sensor_fault_tables')
-            ->where('sensor_id', $sensorId)
-            ->orderBy('id', 'desc')
-            ->first();
+    $lastRecord = DB::table('sensor_fault_tables')
+        ->where('sensor_id', $sensorId)
+        ->orderBy('id', 'desc')
+        ->first();
 
-        if ($lastRecord && $lastRecord->value == $value) {
-            continue;
-        }
-
-        $insertData[] = [
-            'sensor_id' => $sensorId,
-            'value' => $value,
-            'created_at' => $formattedTime,
-            'updated_at' => $formattedTime,
-        ];
+    if ($lastRecord && (string)$lastRecord->value === (string)$value) {
+        continue;
     }
 
-    if (!empty($insertData)) {
-        DB::table('sensor_fault_tables')->insert($insertData);
-    }
+    $insertData[] = [
+        'sensor_id'  => $sensorId,
+        'value'      => $value,
+        'created_at' => $formattedTime,
+        'updated_at' => $formattedTime,
+    ];
 }
+
+        if (!empty($insertData)) {
+            DB::table('sensor_fault_tables')->insert($insertData);
+        }
+    }
 }

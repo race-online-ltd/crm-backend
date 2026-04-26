@@ -15,7 +15,9 @@ return new class extends Migration
             $table->id();
             $table->unsignedBigInteger('sensor_id');
             $table->string('value', 255);
-            $table->string('alarm_severity')->nullable(); // Nullable column
+            $table->unsignedBigInteger('acknowledgement_status')->nullable(); // Nullable column
+            $table->unsignedBigInteger('checked_by')->nullable();
+            $table->text('description')->nullable();
             $table->timestamps();
         });
     }

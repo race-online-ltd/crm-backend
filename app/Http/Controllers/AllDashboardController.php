@@ -130,19 +130,96 @@ class AllDashboardController extends Controller
     //     }
     // }
 
+// public function getrDataCenterAlarmDetails(Request $request)
+// {
+//     try {
+//         $sensorIds = $request->sensorIds;
+//         $dataCenterId = intval($request->dc_id);
+
+//         if (!is_array($sensorIds) || empty($sensorIds)) {
+//             return response()->json([
+//                 'success' => false,
+//                 'message' => 'Invalid or empty sensorIds provided',
+//             ], 422);
+//         }
+
+//         // Get sensor data as before
+//         $data = DB::table('sensor_lists as sl')
+//             ->join('data_center_creations as dc', 'sl.data_center_id', '=', 'dc.id')
+//             ->join('sensor_type_lists as stl', 'sl.sensor_type_list_id', '=', 'stl.id')
+//             ->join('device_lists as dl', 'sl.device_id', '=', 'dl.id')
+//             ->join('sensor_real_time_values as stv', 'sl.id', '=', 'stv.sensor_id')
+//              ->leftJoin(DB::raw("
+//         (SELECT sensor_id, alarm_value, created_at
+//          FROM alarm_acknowledgements
+//          WHERE id IN (
+//              SELECT MAX(id)
+//              FROM alarm_acknowledgements
+//              GROUP BY sensor_id
+//          )
+//         ) as aa
+//     "), 'sl.id', '=', 'aa.sensor_id')
+//             ->whereIn('sl.id', $sensorIds)
+//             ->select([
+//                 'dc.name as Data_Center',
+//                 'dl.name as Device_Name',
+//                 'stl.name as Sensor_type',
+//                 'sl.id as Sensor_Id',
+//                 'sl.location as Sensor_location',
+//                 'stv.value as Sensor_value',
+//                 'stv.created_at',
+//                 'aa.alarm_value as acknowledged_alarm_value',
+//                 'aa.created_at as acknowledged_at',
+//             ])
+//             ->orderBy('Sensor_type')
+//             ->get();
+
+//         $existingAcknowledgedSensors = AlarmAcknowledgement::whereIn('sensor_id', $sensorIds)
+//             ->select('sensor_id', 'alarm_value', 'created_at')
+//             ->get()
+//             ->keyBy('sensor_id');
+
+//         $data = $data->map(function ($item) use ($existingAcknowledgedSensors) {
+
+//     $ack = $existingAcknowledgedSensors->get($item->Sensor_Id);
+
+//     $item->is_acknowledged =
+//         !is_null($ack)
+//         && $ack->alarm_value == $item->Sensor_value
+//         && strtotime($ack->created_at) >= strtotime($item->created_at);
+
+//     return $item;
+// });
+
+//         return response()->json([
+//             'success' => true,
+//             'message' => 'Data retrieved successfully',
+//             'data' => $data,
+//             'existing_acknowledged_sensors' => $existingAcknowledgedSensors,
+//         ]);
+
+//     } catch (\Exception $e) {
+//         return response()->json([
+//             'success' => false,
+//             'message' => 'Failed to retrieve data',
+//             'error' => $e->getMessage()
+//         ], 500);
+//     }
+// }
+
+
+
 public function getrDataCenterAlarmDetails(Request $request)
 {
     try {
         $sensorIds = $request->sensorIds;
         $dataCenterId = intval($request->dc_id);
-
         if (!is_array($sensorIds) || empty($sensorIds)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid or empty sensorIds provided',
             ], 422);
         }
-
         // Get sensor data as before
         $data = DB::table('sensor_lists as sl')
             ->join('data_center_creations as dc', 'sl.data_center_id', '=', 'dc.id')
@@ -173,31 +250,32 @@ public function getrDataCenterAlarmDetails(Request $request)
             ])
             ->orderBy('Sensor_type')
             ->get();
-
         $existingAcknowledgedSensors = AlarmAcknowledgement::whereIn('sensor_id', $sensorIds)
             ->select('sensor_id', 'alarm_value', 'created_at')
             ->get()
             ->keyBy('sensor_id');
-
         $data = $data->map(function ($item) use ($existingAcknowledgedSensors) {
-
     $ack = $existingAcknowledgedSensors->get($item->Sensor_Id);
-
     $item->is_acknowledged =
         !is_null($ack)
         && $ack->alarm_value == $item->Sensor_value
         && strtotime($ack->created_at) >= strtotime($item->created_at);
 
+    // ✅ NEW CONDITION: If sensor has newer data than acknowledgment, clear the acknowledged_at value
+    // If stv.created_at > aa.created_at then set aa.created_at as null
+    if (!is_null($item->acknowledged_at) && strtotime($item->created_at) > strtotime($item->acknowledged_at)) {
+        $item->acknowledged_at = null;
+        $item->acknowledged_alarm_value = null; // Also clear the alarm value since acknowledgment is no longer valid
+    }
+
     return $item;
 });
-
         return response()->json([
             'success' => true,
             'message' => 'Data retrieved successfully',
             'data' => $data,
             'existing_acknowledged_sensors' => $existingAcknowledgedSensors,
         ]);
-
     } catch (\Exception $e) {
         return response()->json([
             'success' => false,

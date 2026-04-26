@@ -14,6 +14,9 @@ class SensorFaultTable extends Model
     protected $fillable = [
         'sensor_id',
         'value',
-        'alarm_severity',
+        'acknowledgement_status',
+        'checked_by',
+        'description',
+
     ];
 }

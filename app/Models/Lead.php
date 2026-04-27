@@ -16,6 +16,10 @@ class Lead extends Model
     protected $fillable = [
         'business_entity_id',
         'source_id',
+        'source_info',
+        'lead_assign_id',
+        'kam_id',
+        'backoffice_id',
         'client_id',
         'lead_pipeline_stage_id',
         'expected_revenue',
@@ -27,6 +31,9 @@ class Lead extends Model
     protected $casts = [
         'business_entity_id' => 'integer',
         'source_id' => 'integer',
+        'lead_assign_id' => 'integer',
+        'kam_id' => 'integer',
+        'backoffice_id' => 'integer',
         'client_id' => 'integer',
         'lead_pipeline_stage_id' => 'integer',
         'expected_revenue' => 'decimal:2',
@@ -44,6 +51,26 @@ class Lead extends Model
     public function source(): BelongsTo
     {
         return $this->belongsTo(Source::class, 'source_id');
+    }
+
+    public function leadAssign(): BelongsTo
+    {
+        return $this->belongsTo(LeadAssign::class, 'lead_assign_id');
+    }
+
+    public function kam(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'kam_id');
+    }
+
+    public function assignedToUser(): BelongsTo
+    {
+        return $this->kam();
+    }
+
+    public function backoffice(): BelongsTo
+    {
+        return $this->belongsTo(Backoffice::class, 'backoffice_id');
     }
 
     public function client(): BelongsTo

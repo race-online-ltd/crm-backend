@@ -4,15 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\BusinessEntity;
 use App\Models\Client;
+use App\Models\LeadAssign;
 use App\Models\Lead;
 use App\Models\LeadAttachment;
 use App\Models\LeadPipelineStage;
+use App\Models\Backoffice;
 use App\Models\Product;
 use App\Models\Source;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class LeadController extends Controller
@@ -49,6 +53,39 @@ class LeadController extends Controller
             ])
             ->values();
 
+        $leadAssigns = LeadAssign::query()
+            ->orderBy('id')
+            ->get(['id', 'name'])
+            ->map(fn (LeadAssign $leadAssign) => [
+                'id' => (string) $leadAssign->id,
+                'label' => $leadAssign->name,
+            ])
+            ->values();
+
+        $kamUsers = User::query()
+            ->join('kam_targets', 'kam_targets.kam_id', '=', 'users.id')
+            ->when($businessEntityId > 0, fn ($query) => $query->where('kam_targets.business_entity_id', $businessEntityId))
+            ->where('users.status', true)
+            ->select('users.id', 'users.full_name', 'users.user_name')
+            ->distinct()
+            ->orderBy('users.full_name')
+            ->orderBy('users.user_name')
+            ->get()
+            ->map(fn (User $user) => [
+                'id' => (string) $user->id,
+                'label' => $user->full_name ?: $user->user_name,
+            ])
+            ->values();
+
+        $backoffices = Backoffice::query()
+            ->orderBy('backoffice_name')
+            ->get(['id', 'backoffice_name'])
+            ->map(fn (Backoffice $backoffice) => [
+                'id' => (string) $backoffice->id,
+                'label' => $backoffice->backoffice_name,
+            ])
+            ->values();
+
         $products = Product::query()
             ->when($businessEntityId > 0, fn ($query) => $query->where('business_entity_id', $businessEntityId))
             ->orderBy('product_name')
@@ -65,12 +102,13 @@ class LeadController extends Controller
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('id')
-            ->get(['id', 'business_entity_id', 'stage_name', 'color'])
+            ->get(['id', 'business_entity_id', 'stage_name', 'color', 'sort_order'])
             ->map(fn (LeadPipelineStage $stage) => [
                 'id' => (string) $stage->id,
                 'label' => $stage->stage_name,
                 'business_entity_id' => $stage->business_entity_id,
                 'color' => $stage->color,
+                'sort_order' => $stage->sort_order,
             ])
             ->values();
 
@@ -80,6 +118,9 @@ class LeadController extends Controller
                 'business_entities' => $businessEntities,
                 'sources' => $sources,
                 'clients' => $clients,
+                'lead_assigns' => $leadAssigns,
+                'kam_users' => $kamUsers,
+                'backoffices' => $backoffices,
                 'products' => $products,
                 'stages' => $stages,
             ],
@@ -92,6 +133,9 @@ class LeadController extends Controller
             ->with([
                 'businessEntity:id,name',
                 'source:id,name',
+                'leadAssign:id,name',
+                'kam:id,full_name,user_name',
+                'backoffice:id,backoffice_name',
                 'client:id,client_name',
                 'stage:id,stage_name,color',
                 'products:id,product_name',
@@ -115,16 +159,7 @@ class LeadController extends Controller
         [$validated, $attachments] = $this->validateLeadRequest($request);
 
         $lead = DB::transaction(function () use ($validated, $attachments, $request): Lead {
-            $lead = Lead::create([
-                'business_entity_id' => $validated['business_entity_id'],
-                'source_id' => $validated['source_id'],
-                'client_id' => $validated['client_id'],
-                'lead_pipeline_stage_id' => $validated['lead_pipeline_stage_id'],
-                'expected_revenue' => $validated['expected_revenue'] ?? null,
-                'deadline' => $validated['deadline'] ?? null,
-                'created_by' => $request->user()?->id,
-                'updated_by' => $request->user()?->id,
-            ]);
+            $lead = Lead::create($this->buildLeadAttributes($validated, $request));
 
             $lead->products()->sync($validated['product_ids']);
             $this->storeAttachments($lead, $attachments);
@@ -153,15 +188,7 @@ class LeadController extends Controller
         [$validated, $attachments] = $this->validateLeadRequest($request, $lead->id);
 
         $lead = DB::transaction(function () use ($lead, $validated, $attachments, $request): Lead {
-            $lead->update([
-                'business_entity_id' => $validated['business_entity_id'],
-                'source_id' => $validated['source_id'],
-                'client_id' => $validated['client_id'],
-                'lead_pipeline_stage_id' => $validated['lead_pipeline_stage_id'],
-                'expected_revenue' => $validated['expected_revenue'] ?? null,
-                'deadline' => $validated['deadline'] ?? null,
-                'updated_by' => $request->user()?->id,
-            ]);
+            $lead->update($this->buildLeadAttributes($validated, $request, true));
 
             $lead->products()->sync($validated['product_ids']);
             $this->storeAttachments($lead, $attachments, true);
@@ -191,6 +218,10 @@ class LeadController extends Controller
         $validated = validator($payload, [
             'business_entity_id' => ['required', 'integer', Rule::exists('business_entities', 'id')],
             'source_id' => ['required', 'integer', Rule::exists('sources', 'id')],
+            'source_info' => ['nullable', 'string'],
+            'lead_assign_id' => ['required', 'integer', Rule::exists('lead_assign', 'id')],
+            'kam_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+            'backoffice_id' => ['nullable', 'integer', Rule::exists('backoffice', 'id')],
             'client_id' => ['required', 'integer', Rule::exists('clients', 'id')],
             'lead_pipeline_stage_id' => [
                 'required',
@@ -203,6 +234,27 @@ class LeadController extends Controller
             'deadline' => ['nullable', 'date'],
             'attachments' => ['nullable', 'array'],
         ])->validate();
+
+        $leadAssignName = LeadAssign::query()
+            ->where('id', $validated['lead_assign_id'])
+            ->value('name');
+
+        $assignType = strtolower(trim((string) $leadAssignName));
+        if ($assignType === 'kam') {
+            if (empty($validated['kam_id'])) {
+                abort(response()->json([
+                    'message' => 'KAM user is required when lead_assign_id points to KAM.',
+                ], 422));
+            }
+            $validated['backoffice_id'] = null;
+        } elseif ($assignType === 'back office') {
+            if (empty($validated['backoffice_id'])) {
+                abort(response()->json([
+                    'message' => 'Back office is required when lead_assign_id points to Back Office.',
+                ], 422));
+            }
+            $validated['kam_id'] = null;
+        }
 
         $stageBelongs = LeadPipelineStage::query()
             ->where('id', $validated['lead_pipeline_stage_id'])
@@ -229,6 +281,41 @@ class LeadController extends Controller
         return [$validated, $this->extractUploadedFiles($request)];
     }
 
+    private function buildLeadAttributes(array $validated, Request $request, bool $isUpdate = false): array
+    {
+        $attributes = [
+            'business_entity_id' => $validated['business_entity_id'],
+            'source_id' => $validated['source_id'],
+            'client_id' => $validated['client_id'],
+            'lead_pipeline_stage_id' => $validated['lead_pipeline_stage_id'],
+            'expected_revenue' => $validated['expected_revenue'] ?? null,
+            'deadline' => $validated['deadline'] ?? null,
+            'updated_by' => $request->user()?->id,
+        ];
+
+        if (! $isUpdate) {
+            $attributes['created_by'] = $request->user()?->id;
+        }
+
+        if (Schema::hasColumn('leads', 'source_info')) {
+            $attributes['source_info'] = $validated['source_info'] ?? null;
+        }
+
+        if (Schema::hasColumn('leads', 'lead_assign_id')) {
+            $attributes['lead_assign_id'] = $validated['lead_assign_id'] ?? null;
+        }
+
+        if (Schema::hasColumn('leads', 'kam_id')) {
+            $attributes['kam_id'] = $validated['kam_id'] ?? null;
+        }
+
+        if (Schema::hasColumn('leads', 'backoffice_id')) {
+            $attributes['backoffice_id'] = $validated['backoffice_id'] ?? null;
+        }
+
+        return $attributes;
+    }
+
     private function normalizeLeadPayload(Request $request): array
     {
         $payload = $request->all();
@@ -242,9 +329,46 @@ class LeadController extends Controller
             }
         }
 
+        $assignType = strtolower(trim((string) (
+            $payload['assigned_to_type']
+            ?? $payload['assign_to_type']
+            ?? ''
+        )));
+        $leadAssignId = $payload['lead_assign_id'] ?? null;
+
+        if (! $leadAssignId && $assignType !== '') {
+            $normalizedAssignName = $assignType === 'backoffice' || $assignType === 'back office'
+                ? 'Back Office'
+                : 'KAM';
+
+            $leadAssignId = LeadAssign::query()
+                ->whereRaw('LOWER(name) = ?', [strtolower($normalizedAssignName)])
+                ->value('id');
+        }
+
+        $kamId = $payload['kam_id']
+            ?? $payload['assign_target_id']
+            ?? $payload['assignTargetId']
+            ?? $payload['assigned_to_user_id']
+            ?? null;
+
+        $backofficeId = $payload['backoffice_id']
+            ?? $payload['backofficeId']
+            ?? null;
+
         return [
             'business_entity_id' => (int) ($payload['business_entity_id'] ?? 0),
             'source_id' => (int) ($payload['source_id'] ?? 0),
+            'source_info' => isset($payload['source_info']) && $payload['source_info'] !== ''
+                ? trim((string) $payload['source_info'])
+                : null,
+            'lead_assign_id' => $leadAssignId ? (int) $leadAssignId : null,
+            'kam_id' => $kamId !== null && $kamId !== ''
+                ? (int) $kamId
+                : null,
+            'backoffice_id' => $backofficeId !== null && $backofficeId !== ''
+                ? (int) $backofficeId
+                : null,
             'client_id' => (int) ($payload['client_id'] ?? 0),
             'lead_pipeline_stage_id' => (int) ($payload['lead_pipeline_stage_id'] ?? 0),
             'product_ids' => array_values(array_filter(array_map('intval', (array) ($payload['product_ids'] ?? [])))),
@@ -291,6 +415,9 @@ class LeadController extends Controller
         return [
             'businessEntity:id,name',
             'source:id,name',
+            'leadAssign:id,name',
+            'kam:id,full_name,user_name',
+            'backoffice:id,backoffice_name',
             'client:id,client_name',
             'stage:id,stage_name,color',
             'products:id,product_name',
@@ -308,6 +435,14 @@ class LeadController extends Controller
             'business_entity' => $lead->businessEntity?->name,
             'source_id' => $lead->source_id,
             'source' => $lead->source?->name,
+            'source_info' => $lead->source_info,
+            'lead_assign_id' => $lead->lead_assign_id,
+            'lead_assign' => $lead->leadAssign?->name,
+            'lead_assign_type' => $lead->leadAssign?->name,
+            'kam_id' => $lead->kam_id,
+            'kam' => $lead->kam?->full_name ?? $lead->kam?->user_name,
+            'backoffice_id' => $lead->backoffice_id,
+            'backoffice' => $lead->backoffice?->backoffice_name,
             'client_id' => $lead->client_id,
             'client' => $lead->client?->client_name,
             'lead_pipeline_stage_id' => $lead->lead_pipeline_stage_id,

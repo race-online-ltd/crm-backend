@@ -8,19 +8,23 @@ return new class extends Migration
 {
     public function up(): void
     {
-       Schema::create('leads', function (Blueprint $table) {
-    $table->id();
-    $table->foreignId('business_entity_id')->constrained('business_entities')->restrictOnDelete();
-    $table->foreignId('source_id')->constrained('sources')->restrictOnDelete();
-    $table->foreignId('client_id')->constrained('clients')->restrictOnDelete();
-    $table->foreignId('lead_pipeline_stage_id')->constrained('lead_pipeline_stages')->restrictOnDelete();
-    $table->decimal('expected_revenue', 15, 2)->nullable();
-    $table->date('deadline')->nullable();
-    $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-    $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
-    $table->timestamps();
-    $table->softDeletes();
-});
+        Schema::create('leads', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('business_entity_id')->constrained('business_entities')->restrictOnDelete();
+            $table->foreignId('source_id')->constrained('sources')->restrictOnDelete();
+            $table->text('source_info')->nullable();
+            $table->foreignId('lead_assign_id')->constrained('lead_assign')->restrictOnDelete();
+            $table->foreignId('kam_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('backoffice_id')->nullable()->constrained('backoffice')->nullOnDelete();
+            $table->foreignId('client_id')->constrained('clients')->restrictOnDelete();
+            $table->foreignId('lead_pipeline_stage_id')->constrained('lead_pipeline_stages')->restrictOnDelete();
+            $table->decimal('expected_revenue', 15, 2)->nullable();
+            $table->date('deadline')->nullable();
+            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('updated_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamps();
+            $table->softDeletes();
+        });
     }
 
     public function down(): void

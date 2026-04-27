@@ -19,6 +19,19 @@ use Illuminate\Http\JsonResponse;
 
 class SettingController extends Controller
 {
+    public function googleMapsConfig(): JsonResponse
+    {
+        $browserKey = (string) config('services.google_maps.browser_key', '');
+
+        return response()->json([
+            'message' => 'Google Maps configuration fetched successfully.',
+            'data' => [
+                'enabled' => $browserKey !== '',
+                'browser_api_key' => $browserKey,
+            ],
+        ]);
+    }
+
     public function rolesIndex(): JsonResponse
     {
         $roles = Role::query()

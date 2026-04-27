@@ -45,4 +45,8 @@ return [
         'shared_bearer_token' => env('MEETING_RECORDER_SHARED_BEARER_TOKEN'),
     ],
 
+    'google_maps' => [
+        'browser_key' => env('GOOGLE_MAPS_BROWSER_API_KEY'),
+    ],
+
 ];

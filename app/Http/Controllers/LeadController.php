@@ -45,11 +45,28 @@ class LeadController extends Controller
             ->values();
 
         $clients = Client::query()
+            ->when($businessEntityId > 0, fn ($query) => $query->where('business_entity_id', $businessEntityId))
             ->orderBy('client_name')
-            ->get(['id', 'client_name'])
+            ->get([
+                'id',
+                'client_name',
+                'contact_person',
+                'contact_no',
+                'email',
+                'address',
+                'lat',
+                'long',
+            ])
             ->map(fn (Client $client) => [
                 'id' => (string) $client->id,
                 'label' => $client->client_name,
+                'client_name' => $client->client_name,
+                'contact_person' => $client->contact_person,
+                'contact_no' => $client->contact_no,
+                'email' => $client->email,
+                'address' => $client->address,
+                'lat' => $client->lat,
+                'long' => $client->long,
             ])
             ->values();
 

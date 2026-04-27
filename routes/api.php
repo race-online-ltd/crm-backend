@@ -339,6 +339,7 @@ Route::middleware('auth:api')->group(function (): void {
     });
 
     Route::prefix('system')->controller(SettingController::class)->group(function (): void {
+        Route::get('/google-maps-config', 'googleMapsConfig');
         Route::get('/roles', 'rolesIndex');
         Route::get('/access-control', 'accessControlIndex');
         Route::post('/roles', 'storeRole');
@@ -456,6 +457,8 @@ Route::middleware('auth:api')->group(function (): void {
 
     Route::prefix('tasks')->controller(TaskController::class)->group(function (): void {
         Route::get('/options', 'options');
+        Route::get('/calendar/filters', 'calendarFilters');
+        Route::get('/calendar', 'calendar');
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{task}', 'show');

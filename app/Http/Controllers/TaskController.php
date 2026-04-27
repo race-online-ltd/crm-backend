@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BusinessEntity;
 use App\Models\Client;
+use App\Models\Group;
 use App\Models\Lead;
 use App\Models\Task;
 use App\Models\TaskAttachment;
@@ -10,6 +12,10 @@ use App\Models\TaskNote;
 use App\Models\TaskNoteAttachment;
 use App\Models\TaskReminderChannel;
 use App\Models\TaskType;
+use App\Models\Team;
+use App\Models\UserDefaultMapping;
+use App\Models\UserGroupMapping;
+use App\Models\UserTeamMapping;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -82,6 +88,105 @@ class TaskController extends Controller
                     ['id' => 'sms', 'label' => 'SMS'],
                 ],
             ],
+        ]);
+    }
+
+    public function calendarFilters(Request $request): JsonResponse
+    {
+        $userId = (int) ($request->user()?->id ?? 0);
+
+        if ($userId <= 0) {
+            return response()->json([
+                'message' => 'Task calendar filters fetched successfully.',
+                'data' => [
+                    'business_entities' => [],
+                    'teams' => [],
+                    'groups' => [],
+                    'kams' => [],
+                ],
+            ]);
+        }
+
+        $visibleBusinessEntityIds = $this->taskCalendarBusinessEntityIds($userId);
+        $visibleKamIds = $this->taskCalendarKamIds($userId);
+        $teamIds = $this->resolveUserTeamIds($userId);
+        $groupIds = $this->resolveUserGroupIds($userId);
+
+        $businessEntities = BusinessEntity::query()
+            ->when($visibleBusinessEntityIds !== [], fn ($query) => $query->whereIn('id', $visibleBusinessEntityIds))
+            ->where('status', true)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (BusinessEntity $businessEntity) => [
+                'id' => (string) $businessEntity->id,
+                'label' => $businessEntity->name,
+            ])
+            ->values();
+
+        $teams = Team::query()
+            ->when($teamIds !== [], fn ($query) => $query->whereIn('id', $teamIds))
+            ->where('status', true)
+            ->orderByRaw('COALESCE(team_name, name)')
+            ->get(['id', 'team_name', 'name'])
+            ->map(fn (Team $team) => [
+                'id' => (string) $team->id,
+                'label' => (string) ($team->team_name ?: $team->name ?: "Team {$team->id}"),
+            ])
+            ->values();
+
+        $groups = Group::query()
+            ->when($groupIds !== [], fn ($query) => $query->whereIn('id', $groupIds))
+            ->where('status', true)
+            ->orderByRaw('COALESCE(group_name, name)')
+            ->get(['id', 'group_name', 'name'])
+            ->map(fn (Group $group) => [
+                'id' => (string) $group->id,
+                'label' => (string) ($group->group_name ?: $group->name ?: "Group {$group->id}"),
+            ])
+            ->values();
+
+        $kams = User::query()
+            ->whereIn('id', $visibleKamIds)
+            ->where('status', true)
+            ->orderBy('full_name')
+            ->orderBy('user_name')
+            ->get(['id', 'full_name', 'user_name'])
+            ->map(fn (User $user) => [
+                'id' => (string) $user->id,
+                'label' => $user->full_name ?: $user->user_name,
+            ])
+            ->values();
+
+        return response()->json([
+            'message' => 'Task calendar filters fetched successfully.',
+            'data' => [
+                'business_entities' => $businessEntities,
+                'teams' => $teams,
+                'groups' => $groups,
+                'kams' => $kams,
+            ],
+        ]);
+    }
+
+    public function calendar(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+            'business_entity_id' => ['nullable', 'integer', Rule::exists('business_entities', 'id')],
+            'team_id' => ['nullable', 'integer', Rule::exists('teams', 'id')],
+            'group_id' => ['nullable', 'integer', Rule::exists('groups', 'id')],
+            'kam_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
+        ]);
+
+        $tasks = $this->taskCalendarQuery($validated, $request->user())
+            ->get()
+            ->map(fn (Task $task) => $this->transformTask($task))
+            ->values();
+
+        return response()->json([
+            'message' => 'Task calendar fetched successfully.',
+            'data' => $tasks,
         ]);
     }
 
@@ -506,10 +611,12 @@ class TaskController extends Controller
     private function taskRelations(): array
     {
         return [
-            'lead:id,client_id,business_entity_id',
+            'lead:id,client_id,business_entity_id,kam_id',
             'lead.client:id,client_name',
             'lead.businessEntity:id,name',
-            'client:id,client_name',
+            'lead.kam:id,full_name,user_name',
+            'client:id,client_name,business_entity_id',
+            'client.businessEntity:id,name',
             'assignedToUser:id,full_name,user_name',
             'creator:id,full_name,user_name',
             'taskType:id,name',
@@ -529,8 +636,12 @@ class TaskController extends Controller
             'lead_id' => $task->lead_id,
             'assocType' => $task->lead_id ? 'lead' : ($task->client_id ? 'client' : null),
             'lead' => $task->lead?->client?->client_name,
+            'business_entity_id' => $task->lead?->business_entity_id ?? $task->client?->business_entity_id,
+            'business_entity_name' => $task->lead?->businessEntity?->name ?? $task->client?->businessEntity?->name,
             'client_id' => $task->client_id,
             'client' => $task->client?->client_name,
+            'kam_id' => $task->lead?->kam_id,
+            'kam_name' => $task->lead?->kam?->full_name ?? $task->lead?->kam?->user_name,
             'assigned_to_user_id' => $task->assigned_to_user_id,
             'assigned_to_user_name' => $task->assignedToUser?->full_name ?? $task->assignedToUser?->user_name,
             'created_by_user_id' => $task->created_by_user_id,
@@ -744,6 +855,241 @@ class TaskController extends Controller
             default => 'tasks.scheduled_at',
         }, $sortOrder)
             ->orderBy('tasks.id', 'desc');
+    }
+
+    private function taskCalendarQuery(array $filters, ?User $user)
+    {
+        $query = $this->taskCalendarScope((int) ($user?->id ?? 0))
+            ->select('tasks.*')
+            ->with($this->taskRelations());
+
+        if (! empty($filters['date_from'])) {
+            $query->whereDate('tasks.scheduled_at', '>=', Carbon::parse($filters['date_from'])->toDateString());
+        }
+
+        if (! empty($filters['date_to'])) {
+            $query->whereDate('tasks.scheduled_at', '<=', Carbon::parse($filters['date_to'])->toDateString());
+        }
+
+        if (! empty($filters['business_entity_id'])) {
+            $businessEntityId = (int) $filters['business_entity_id'];
+
+            $query->where(function ($builder) use ($businessEntityId): void {
+                $builder->where('leads_sort.business_entity_id', $businessEntityId)
+                    ->orWhere('task_clients_sort.business_entity_id', $businessEntityId);
+            });
+        }
+
+        if (! empty($filters['team_id'])) {
+            $teamUserIds = $this->resolveUserIdsByTeam((int) $filters['team_id']);
+            $query->whereIn('tasks.assigned_to_user_id', $teamUserIds !== [] ? $teamUserIds : [0]);
+        }
+
+        if (! empty($filters['group_id'])) {
+            $groupUserIds = $this->resolveUserIdsByGroup((int) $filters['group_id']);
+            $query->whereIn('tasks.assigned_to_user_id', $groupUserIds !== [] ? $groupUserIds : [0]);
+        }
+
+        if (! empty($filters['kam_id'])) {
+            $query->where('leads_sort.kam_id', (int) $filters['kam_id']);
+        }
+
+        return $query
+            ->orderBy('tasks.scheduled_at')
+            ->orderBy('tasks.id');
+    }
+
+    private function taskCalendarScope(int $userId)
+    {
+        $query = Task::query()
+            ->leftJoin('leads as leads_sort', 'leads_sort.id', '=', 'tasks.lead_id')
+            ->leftJoin('clients as task_clients_sort', 'task_clients_sort.id', '=', 'tasks.client_id');
+
+        $visibleUserIds = $this->resolveVisibleTaskUserIds($userId);
+
+        if ($visibleUserIds === []) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function ($builder) use ($visibleUserIds, $userId): void {
+            $builder->whereIn('tasks.assigned_to_user_id', $visibleUserIds);
+
+            if ($userId > 0) {
+                $builder->orWhere(function ($inner) use ($userId): void {
+                    $inner->whereNull('tasks.assigned_to_user_id')
+                        ->where('tasks.created_by_user_id', $userId);
+                });
+            }
+        });
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function resolveVisibleTaskUserIds(int $userId): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+
+        return collect([$userId])
+            ->merge(
+                collect($this->resolveUserTeamIds($userId))
+                    ->flatMap(fn (int $teamId) => $this->resolveUserIdsByTeam($teamId))
+            )
+            ->merge(
+                collect($this->resolveUserGroupIds($userId))
+                    ->flatMap(fn (int $groupId) => $this->resolveUserIdsByGroup($groupId))
+            )
+            ->map(fn ($value) => (int) $value)
+            ->filter(static fn (int $value) => $value > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function resolveUserIdsByTeam(int $teamId): array
+    {
+        return collect()
+            ->merge(
+                UserTeamMapping::query()
+                    ->where('team_id', $teamId)
+                    ->pluck('user_id')
+                    ->all()
+            )
+            ->merge(
+                UserDefaultMapping::query()
+                    ->where('team_id', $teamId)
+                    ->pluck('user_id')
+                    ->all()
+            )
+            ->map(fn ($value) => (int) $value)
+            ->filter(static fn (int $value) => $value > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function resolveUserIdsByGroup(int $groupId): array
+    {
+        return collect()
+            ->merge(
+                UserGroupMapping::query()
+                    ->where('group_id', $groupId)
+                    ->pluck('user_id')
+                    ->all()
+            )
+            ->merge(
+                UserDefaultMapping::query()
+                    ->where('group_id', $groupId)
+                    ->pluck('user_id')
+                    ->all()
+            )
+            ->map(fn ($value) => (int) $value)
+            ->filter(static fn (int $value) => $value > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function resolveUserTeamIds(int $userId): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+
+        return collect()
+            ->merge(
+                UserTeamMapping::query()
+                    ->where('user_id', $userId)
+                    ->pluck('team_id')
+                    ->all()
+            )
+            ->merge(
+                UserDefaultMapping::query()
+                    ->where('user_id', $userId)
+                    ->pluck('team_id')
+                    ->all()
+            )
+            ->map(fn ($value) => (int) $value)
+            ->filter(static fn (int $value) => $value > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function resolveUserGroupIds(int $userId): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+
+        return collect()
+            ->merge(
+                UserGroupMapping::query()
+                    ->where('user_id', $userId)
+                    ->pluck('group_id')
+                    ->all()
+            )
+            ->merge(
+                UserDefaultMapping::query()
+                    ->where('user_id', $userId)
+                    ->pluck('group_id')
+                    ->all()
+            )
+            ->map(fn ($value) => (int) $value)
+            ->filter(static fn (int $value) => $value > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function taskCalendarBusinessEntityIds(int $userId): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+
+        return $this->taskCalendarScope($userId)
+            ->selectRaw('DISTINCT COALESCE(leads_sort.business_entity_id, task_clients_sort.business_entity_id) as business_entity_id')
+            ->pluck('business_entity_id')
+            ->map(fn ($value) => (int) $value)
+            ->filter(static fn (int $value) => $value > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function taskCalendarKamIds(int $userId): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+
+        return $this->taskCalendarScope($userId)
+            ->selectRaw('DISTINCT leads_sort.kam_id as kam_id')
+            ->pluck('kam_id')
+            ->map(fn ($value) => (int) $value)
+            ->filter(static fn (int $value) => $value > 0)
+            ->values()
+            ->all();
     }
 
     private function calculateDistanceMeters(float $lat1, float $lon1, float $lat2, float $lon2): float

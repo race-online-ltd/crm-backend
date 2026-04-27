@@ -14,6 +14,27 @@ use Illuminate\Support\Facades\DB;
 
 class KamProductMappingController extends Controller
 {
+    public function index(): JsonResponse
+    {
+        $mappings = KamProductMapping::query()
+            ->with([
+                'user:id,full_name,user_name',
+                'product:id,product_name,business_entity_id',
+                'product.businessEntity:id,name',
+            ])
+            ->orderBy('user_id')
+            ->orderBy('product_id')
+            ->get()
+            ->groupBy(fn (KamProductMapping $mapping) => $mapping->user_id . ':' . $mapping->product?->business_entity_id)
+            ->map(fn ($group) => $this->transformMappingGroup($group))
+            ->values();
+
+        return response()->json([
+            'message' => 'KAM product mappings fetched successfully.',
+            'data' => $mappings,
+        ]);
+    }
+
     public function options(): JsonResponse
     {
         $users = User::query()
@@ -146,5 +167,27 @@ class KamProductMappingController extends Controller
                 'products' => $products,
             ],
         ]);
+    }
+
+    private function transformMappingGroup($group): array
+    {
+        $first = $group->first();
+        $products = $group
+            ->map(fn (KamProductMapping $mapping) => $mapping->product)
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        return [
+            'user_id' => $first?->user_id,
+            'user_label' => $first?->user?->full_name ?: $first?->user?->user_name,
+            'business_entity_id' => $first?->product?->businessEntity?->id,
+            'business_entity_name' => $first?->product?->businessEntity?->name,
+            'product_ids' => $products->pluck('id')->values(),
+            'products' => $products->map(fn ($product) => [
+                'id' => $product->id,
+                'label' => $product->product_name,
+            ])->values(),
+        ];
     }
 }

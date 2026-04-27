@@ -15,6 +15,7 @@ use App\Http\Controllers\Settings\KamProductMappingController;
 use App\Http\Controllers\Settings\ApprovalPipelineStepController;
 use App\Http\Controllers\Settings\LeadPipelineStageController;
 use App\Http\Controllers\Settings\SettingController;
+use App\Http\Controllers\Settings\SocialConnectionController;
 use App\Http\Controllers\Settings\SystemAccountConnectionController;
 use App\Http\Controllers\TeamControllers\TeamController;
 use App\Http\Controllers\EntityColumnMappingController;
@@ -374,12 +375,19 @@ Route::middleware('auth:api')->group(function (): void {
 
         Route::get('/kam-mappings/options', [KamProductMappingController::class, 'options']);
         Route::get('/business-entities/{businessEntity}/products', [KamProductMappingController::class, 'products']);
+        Route::get('/kam-mappings/list', [KamProductMappingController::class, 'index']);
         Route::get('/kam-mappings', [KamProductMappingController::class, 'show']);
         Route::post('/kam-mappings', [KamProductMappingController::class, 'store']);
 
         Route::get('/lead-pipeline-stages/options', [LeadPipelineStageController::class, 'options']);
         Route::get('/lead-pipeline-stages', [LeadPipelineStageController::class, 'show']);
         Route::post('/lead-pipeline-stages', [LeadPipelineStageController::class, 'store']);
+
+        Route::get('/social-connections', [SocialConnectionController::class, 'index']);
+        Route::post('/social-connections', [SocialConnectionController::class, 'store']);
+        Route::patch('/social-connections/{channelConnection}/activate', [SocialConnectionController::class, 'activate']);
+        Route::patch('/social-connections/{channelConnection}/deactivate', [SocialConnectionController::class, 'deactivate']);
+        Route::delete('/social-connections/{channelConnection}', [SocialConnectionController::class, 'destroy']);
 
         Route::get('/approval-pipeline-steps/options', [ApprovalPipelineStepController::class, 'options']);
         Route::get('/approval-pipeline-steps', [ApprovalPipelineStepController::class, 'show']);

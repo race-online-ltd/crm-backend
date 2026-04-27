@@ -12,7 +12,7 @@ class NavigationPermissionSeeder extends Seeder
     public function run(): void
     {
         $permissions = [
-            'social' => ['view'],
+            'social' => ['view', 'update'],
             'performance' => ['view'],
             'target' => ['view'],
             'leads' => ['view', 'create', 'update', 'delete'],

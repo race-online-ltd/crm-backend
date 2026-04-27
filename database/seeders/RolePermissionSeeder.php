@@ -38,6 +38,7 @@ class RolePermissionSeeder extends Seeder
             ],
             'Helpdesk' => [
                 'social.view',
+                'social.update',
                 'performance.view',
                 'target.view',
                 'leads.view',

@@ -313,14 +313,29 @@ Route::middleware('auth:api')->group(function (): void {
     Route::put('profile/change-password', [ProfileController::class, 'changePassword']);
     Route::post('integrations/meeting-recorder/launch', [MeetingRecorderController::class, 'launch']);
 
+    // Route::prefix('areas')->controller(AreaController::class)->group(function (): void {
+    //     Route::get('/', 'index');
+    //     Route::get('/divisions/{division}/districts', 'districts');
+    //     Route::get('/districts/{district}/thanas', 'thanas');
+    //     Route::post('/', 'store');
+    //     Route::put('/{type}/{id}', 'update');
+    //     Route::patch('/{type}/{id}', 'update');
+    //     Route::delete('/{type}/{id}', 'destroy');
+    // });
+
     Route::prefix('areas')->controller(AreaController::class)->group(function (): void {
-        Route::get('/', 'index');
+        Route::get('/', 'index')->defaults('permission', 'areas.view')
+        ->middleware('permission');
         Route::get('/divisions/{division}/districts', 'districts');
         Route::get('/districts/{district}/thanas', 'thanas');
-        Route::post('/', 'store');
-        Route::put('/{type}/{id}', 'update');
-        Route::patch('/{type}/{id}', 'update');
-        Route::delete('/{type}/{id}', 'destroy');
+        Route::post('/', 'store')->defaults('permission', 'areas.create')
+        ->middleware('permission');
+        Route::put('/{type}/{id}', 'update')->defaults('permission', 'areas.update')
+        ->middleware('permission');
+        Route::patch('/{type}/{id}', 'update')->defaults('permission', 'areas.update')
+        ->middleware('permission');
+        Route::delete('/{type}/{id}', 'destroy')->defaults('permission', 'areas.delete')
+        ->middleware('permission');
     });
 
     Route::prefix('clients')->controller(ClientsController::class)->group(function (): void {
@@ -353,6 +368,46 @@ Route::middleware('auth:api')->group(function (): void {
         Route::delete('/users/{systemUser}', 'destroyUser');
 
     });
+    // Route::prefix('system')->controller(SettingController::class)->group(function (): void {
+        
+    //     // Roles
+    //     Route::get('/roles', 'rolesIndex')
+    //         ->defaults('permission', 'system.roles.view')
+    //         ->middleware('permission');
+    //     Route::get('/access-control', 'accessControlIndex')
+    //         ->defaults('permission', 'system.access-control.view')
+    //         ->middleware('permission');
+    //     Route::post('/roles', 'storeRole')
+    //         ->defaults('permission', 'system.roles.create')
+    //         ->middleware('permission');
+    //     Route::put('/roles/{role}', 'updateRole')
+    //         ->defaults('permission', 'system.roles.update')
+    //         ->middleware('permission');
+    //     Route::patch('/roles/{role}', 'updateRole')
+    //         ->defaults('permission', 'system.roles.update')
+    //         ->middleware('permission');
+    //     Route::delete('/roles/{role}', 'destroyRole')
+    //         ->defaults('permission', 'system.roles.delete')
+    //         ->middleware('permission');
+
+    //     // Users
+    //     Route::get('/users', 'usersIndex')
+    //         ->defaults('permission', 'system.users.view')
+    //         ->middleware('permission');
+    //     Route::post('/users', 'storeUser')
+    //         ->defaults('permission', 'system.users.create')
+    //         ->middleware('permission');
+    //     Route::put('/users/{systemUser}', 'updateUser')
+    //         ->defaults('permission', 'system.users.update')
+    //         ->middleware('permission');
+    //     Route::patch('/users/{systemUser}', 'updateUser')
+    //         ->defaults('permission', 'system.users.update')
+    //         ->middleware('permission');
+    //     Route::delete('/users/{systemUser}', 'destroyUser')
+    //         ->defaults('permission', 'system.users.delete')
+    //         ->middleware('permission');
+
+    // });
 
     Route::prefix('system')->controller(RoleController::class)->group(function (): void {
         Route::get('/roles/{role}/permissions', 'rolePermission');
@@ -413,6 +468,155 @@ Route::middleware('auth:api')->group(function (): void {
         Route::post('/user-mappings', [MappingController::class, 'store']);
     });
 
+    // Route::prefix('system')->group(function (): void {
+
+    //     // Backoffice
+    //     Route::get('/backoffice/options', [BackofficeController::class, 'options'])
+    //         ->defaults('permission', 'system.backoffice.view')
+    //         ->middleware('permission');
+    //     Route::get('/backoffice', [BackofficeController::class, 'index'])
+    //         ->defaults('permission', 'system.backoffice.view')
+    //         ->middleware('permission');
+    //     Route::post('/backoffice', [BackofficeController::class, 'store'])
+    //         ->defaults('permission', 'system.backoffice.create')
+    //         ->middleware('permission');
+    //     Route::put('/backoffice/{backoffice}', [BackofficeController::class, 'update'])
+    //         ->defaults('permission', 'system.backoffice.update')
+    //         ->middleware('permission');
+    //     Route::patch('/backoffice/{backoffice}', [BackofficeController::class, 'update'])
+    //         ->defaults('permission', 'system.backoffice.update')
+    //         ->middleware('permission');
+    //     Route::delete('/backoffice/{backoffice}', [BackofficeController::class, 'destroy'])
+    //         ->defaults('permission', 'system.backoffice.delete')
+    //         ->middleware('permission');
+
+    //     // Business Entities
+    //     Route::get('/business-entities', [BusinessEntityController::class, 'index'])
+    //         ->defaults('permission', 'system.business-entities.view')
+    //         ->middleware('permission');
+    //     Route::post('/business-entities', [BusinessEntityController::class, 'store'])
+    //         ->defaults('permission', 'system.business-entities.create')
+    //         ->middleware('permission');
+    //     Route::put('/business-entities/{businessEntity}', [BusinessEntityController::class, 'update'])
+    //         ->defaults('permission', 'system.business-entities.update')
+    //         ->middleware('permission');
+    //     Route::patch('/business-entities/{businessEntity}', [BusinessEntityController::class, 'update'])
+    //         ->defaults('permission', 'system.business-entities.update')
+    //         ->middleware('permission');
+    //     Route::delete('/business-entities/{businessEntity}', [BusinessEntityController::class, 'destroy'])
+    //         ->defaults('permission', 'system.business-entities.delete')
+    //         ->middleware('permission');
+
+    //     // KAM Mappings
+    //     Route::get('/kam-mappings/options', [KamProductMappingController::class, 'options'])
+    //         ->defaults('permission', 'system.kam-mappings.view')
+    //         ->middleware('permission');
+    //     Route::get('/business-entities/{businessEntity}/products', [KamProductMappingController::class, 'products'])
+    //         ->defaults('permission', 'system.business-entities.view')
+    //         ->middleware('permission');
+    //     Route::get('/kam-mappings/list', [KamProductMappingController::class, 'index'])
+    //         ->defaults('permission', 'system.kam-mappings.view')
+    //         ->middleware('permission');
+    //     Route::get('/kam-mappings', [KamProductMappingController::class, 'show'])
+    //         ->defaults('permission', 'system.kam-mappings.view')
+    //         ->middleware('permission');
+    //     Route::post('/kam-mappings', [KamProductMappingController::class, 'store'])
+    //         ->defaults('permission', 'system.kam-mappings.create')
+    //         ->middleware('permission');
+
+    //     // Lead Pipeline Stages
+    //     Route::get('/lead-pipeline-stages/options', [LeadPipelineStageController::class, 'options'])
+    //         ->defaults('permission', 'system.lead-pipeline-stages.view')
+    //         ->middleware('permission');
+    //     Route::get('/lead-pipeline-stages', [LeadPipelineStageController::class, 'show'])
+    //         ->defaults('permission', 'system.lead-pipeline-stages.view')
+    //         ->middleware('permission');
+    //     Route::post('/lead-pipeline-stages', [LeadPipelineStageController::class, 'store'])
+    //         ->defaults('permission', 'system.lead-pipeline-stages.create')
+    //         ->middleware('permission');
+
+    //     // Social Connections
+    //     Route::get('/social-connections', [SocialConnectionController::class, 'index'])
+    //         ->defaults('permission', 'system.social-connections.view')
+    //         ->middleware('permission');
+    //     Route::post('/social-connections', [SocialConnectionController::class, 'store'])
+    //         ->defaults('permission', 'system.social-connections.create')
+    //         ->middleware('permission');
+    //     Route::patch('/social-connections/{channelConnection}/activate', [SocialConnectionController::class, 'activate'])
+    //         ->defaults('permission', 'system.social-connections.update')
+    //         ->middleware('permission');
+    //     Route::patch('/social-connections/{channelConnection}/deactivate', [SocialConnectionController::class, 'deactivate'])
+    //         ->defaults('permission', 'system.social-connections.update')
+    //         ->middleware('permission');
+    //     Route::delete('/social-connections/{channelConnection}', [SocialConnectionController::class, 'destroy'])
+    //         ->defaults('permission', 'system.social-connections.delete')
+    //         ->middleware('permission');
+
+    //     // Approval Pipeline Steps
+    //     Route::get('/approval-pipeline-steps/options', [ApprovalPipelineStepController::class, 'options'])
+    //         ->defaults('permission', 'system.approval-pipeline-steps.view')
+    //         ->middleware('permission');
+    //     Route::get('/approval-pipeline-steps', [ApprovalPipelineStepController::class, 'show'])
+    //         ->defaults('permission', 'system.approval-pipeline-steps.view')
+    //         ->middleware('permission');
+    //     Route::post('/approval-pipeline-steps', [ApprovalPipelineStepController::class, 'store'])
+    //         ->defaults('permission', 'system.approval-pipeline-steps.create')
+    //         ->middleware('permission');
+
+    //     // External Systems
+    //     Route::get('/external-systems', [SystemAccountConnectionController::class, 'externalSystemsIndex'])
+    //         ->defaults('permission', 'system.external-systems.view')
+    //         ->middleware('permission');
+    //     Route::get('/external-systems/{externalSystem}/users', [SystemAccountConnectionController::class, 'externalSystemUsers'])
+    //         ->defaults('permission', 'system.external-systems.view')
+    //         ->middleware('permission');
+    //     Route::get('/users/{systemUser}/external-account-connections', [SystemAccountConnectionController::class, 'showUserConnections'])
+    //         ->defaults('permission', 'system.external-systems.view')
+    //         ->middleware('permission');
+    //     Route::post('/users/{systemUser}/external-account-connections', [SystemAccountConnectionController::class, 'storeUserConnections'])
+    //         ->defaults('permission', 'system.external-systems.create')
+    //         ->middleware('permission');
+
+    //     // Teams
+    //     Route::get('/teams', [TeamController::class, 'index'])
+    //         ->defaults('permission', 'system.teams.view')
+    //         ->middleware('permission');
+    //     Route::post('/teams', [TeamController::class, 'store'])
+    //         ->defaults('permission', 'system.teams.create')
+    //         ->middleware('permission');
+    //     Route::put('/teams/{team}', [TeamController::class, 'update'])
+    //         ->defaults('permission', 'system.teams.update')
+    //         ->middleware('permission');
+    //     Route::patch('/teams/{team}', [TeamController::class, 'update'])
+    //         ->defaults('permission', 'system.teams.update')
+    //         ->middleware('permission');
+    //     Route::delete('/teams/{team}', [TeamController::class, 'destroy'])
+    //         ->defaults('permission', 'system.teams.delete')
+    //         ->middleware('permission');
+
+    //     // Groups
+    //     Route::get('/groups', [GroupController::class, 'index'])
+    //         ->defaults('permission', 'system.groups.view')
+    //         ->middleware('permission');
+    //     Route::post('/groups', [GroupController::class, 'store'])
+    //         ->defaults('permission', 'system.groups.create')
+    //         ->middleware('permission');
+    //     Route::put('/groups/{group}', [GroupController::class, 'update'])
+    //         ->defaults('permission', 'system.groups.update')
+    //         ->middleware('permission');
+    //     Route::patch('/groups/{group}', [GroupController::class, 'update'])
+    //         ->defaults('permission', 'system.groups.update')
+    //         ->middleware('permission');
+    //     Route::delete('/groups/{group}', [TeamController::class, 'destroy'])
+    //         ->defaults('permission', 'system.groups.delete')
+    //         ->middleware('permission');
+
+    //     // User Mappings
+    //     Route::post('/user-mappings', [MappingController::class, 'store'])
+    //         ->defaults('permission', 'system.user-mappings.create')
+    //         ->middleware('permission');
+    // });
+
     Route::prefix('entity-column-mappings')->group(function () {
 
         Route::get('/get-navigation-items', [EntityColumnMappingController::class, 'getNavigationItems']);
@@ -435,38 +639,134 @@ Route::middleware('auth:api')->group(function (): void {
 
 });
 
+    // Entity Column Mappings
+    // Route::prefix('entity-column-mappings')->group(function () {
+
+    //     Route::get('/get-navigation-items', [EntityColumnMappingController::class, 'getNavigationItems'])
+    //         ->defaults('permission', 'entity-column-mappings.view')
+    //         ->middleware('permission');
+    //     Route::get('/get-table-items', [EntityColumnMappingController::class, 'getTableItems'])
+    //         ->defaults('permission', 'entity-column-mappings.view')
+    //         ->middleware('permission');
+    //     Route::get('/get-column-items', [EntityColumnMappingController::class, 'getColumnItems'])
+    //         ->defaults('permission', 'entity-column-mappings.view')
+    //         ->middleware('permission');
+    //     Route::get('/table-column-mappings', [EntityColumnMappingController::class, 'getEntityWisetableColumnMappings'])
+    //         ->defaults('permission', 'entity-column-mappings.view')
+    //         ->middleware('permission');
+
+    //     Route::get('/', [EntityColumnMappingController::class, 'index'])
+    //         ->defaults('permission', 'entity-column-mappings.view')
+    //         ->middleware('permission');
+    //     Route::post('/', [EntityColumnMappingController::class, 'store'])
+    //         ->defaults('permission', 'entity-column-mappings.create')
+    //         ->middleware('permission');
+    //     Route::get('/{id}', [EntityColumnMappingController::class, 'show'])
+    //         ->defaults('permission', 'entity-column-mappings.view')
+    //         ->middleware('permission');
+    //     Route::put('/', [EntityColumnMappingController::class, 'update'])
+    //         ->defaults('permission', 'entity-column-mappings.update')
+    //         ->middleware('permission');
+
+    //     Route::post('/bulk', [EntityColumnMappingController::class, 'storeBulk'])
+    //         ->defaults('permission', 'entity-column-mappings.create')
+    //         ->middleware('permission');
+    //     Route::delete('/{id}', [EntityColumnMappingController::class, 'destroy'])
+    //         ->defaults('permission', 'entity-column-mappings.delete')
+    //         ->middleware('permission');
+    //     Route::delete('/delete-by-criteria', [EntityColumnMappingController::class, 'destroyByCriteria'])
+    //         ->defaults('permission', 'entity-column-mappings.delete')
+    //         ->middleware('permission');
+    // });
+
+    // Route::prefix('target')->controller(TargetController::class)->group(function (): void {
+    //     Route::get('/', 'index');
+    //     Route::post('/', 'store');
+    //     Route::get('/{target}', 'show');
+    //     Route::put('/{target}', 'update');
+    //     Route::patch('/{target}', 'update');
+    //     Route::delete('/{target}', 'destroy');
+    // });
+
+    // Route::prefix('leads')->controller(LeadController::class)->group(function (): void {
+    //     Route::get('/options', 'options');
+    //     Route::get('/', 'index');
+    //     Route::post('/', 'store');
+    //     Route::get('/{lead}', 'show');
+    //     Route::put('/{lead}', 'update');
+    //     Route::patch('/{lead}', 'update');
+    //     Route::delete('/{lead}', 'destroy');
+    // });
+
+    // Route::prefix('tasks')->controller(TaskController::class)->group(function (): void {
+    //     Route::get('/options', 'options');
+    //     Route::get('/', 'index');
+    //     Route::post('/', 'store');
+    //     Route::get('/{task}', 'show');
+    //     Route::get('/note-attachments/{taskNoteAttachment}', 'downloadNoteAttachment');
+    //     Route::put('/{task}', 'update');
+    //     Route::patch('/{task}', 'update');
+    //     Route::post('/{task}/check-in', 'checkIn');
+    //     Route::post('/{task}/complete', 'complete');
+    //     Route::post('/{task}/cancel', 'cancel');
+    //     Route::post('/{task}/notes', 'storeNote');
+    //     Route::delete('/{task}', 'destroy');
+    // });
+
     Route::prefix('target')->controller(TargetController::class)->group(function (): void {
-        Route::get('/', 'index');
-        Route::post('/', 'store');
-        Route::get('/{target}', 'show');
-        Route::put('/{target}', 'update');
-        Route::patch('/{target}', 'update');
-        Route::delete('/{target}', 'destroy');
+        Route::get('/', 'index')->defaults('permission', 'target.view')
+        ->middleware('permission');
+        Route::post('/', 'store')->defaults('permission', 'target.create')
+        ->middleware('permission');
+        Route::get('/{target}', 'show')->defaults('permission', 'target.view')
+        ->middleware('permission');
+        Route::put('/{target}', 'update')->defaults('permission', 'target.update')
+        ->middleware('permission');
+        Route::patch('/{target}', 'update')->defaults('permission', 'target.update')
+        ->middleware('permission');
+        Route::delete('/{target}', 'destroy')->defaults('permission', 'target.delete')
+        ->middleware('permission');
     });
 
     Route::prefix('leads')->controller(LeadController::class)->group(function (): void {
         Route::get('/options', 'options');
-        Route::get('/', 'index');
-        Route::post('/', 'store');
-        Route::get('/{lead}', 'show');
-        Route::put('/{lead}', 'update');
-        Route::patch('/{lead}', 'update');
-        Route::delete('/{lead}', 'destroy');
+        Route::get('/', 'index')->defaults('permission', 'leads.view')
+        ->middleware('permission');
+        Route::post('/', 'store')->defaults('permission', 'leads.create')
+        ->middleware('permission');
+        Route::get('/{lead}', 'show')->defaults('permission', 'leads.view')
+        ->middleware('permission');
+        Route::put('/{lead}', 'update')->defaults('permission', 'leads.update')
+        ->middleware('permission');
+        Route::patch('/{lead}', 'update')->defaults('permission', 'leads.update')
+        ->middleware('permission');
+        Route::delete('/{lead}', 'destroy')->defaults('permission', 'leads.delete')
+        ->middleware('permission');
     });
 
     Route::prefix('tasks')->controller(TaskController::class)->group(function (): void {
         Route::get('/options', 'options');
-        Route::get('/', 'index');
-        Route::post('/', 'store');
-        Route::get('/{task}', 'show');
+        Route::get('/', 'index')->defaults('permission', 'tasks.view')
+        ->middleware('permission');
+        Route::post('/', 'store')->defaults('permission', 'tasks.create')
+        ->middleware('permission');
+        Route::get('/{task}', 'show')->defaults('permission', 'tasks.view')
+        ->middleware('permission');
         Route::get('/note-attachments/{taskNoteAttachment}', 'downloadNoteAttachment');
-        Route::put('/{task}', 'update');
-        Route::patch('/{task}', 'update');
-        Route::post('/{task}/check-in', 'checkIn');
-        Route::post('/{task}/complete', 'complete');
-        Route::post('/{task}/cancel', 'cancel');
-        Route::post('/{task}/notes', 'storeNote');
-        Route::delete('/{task}', 'destroy');
+        Route::put('/{task}', 'update')->defaults('permission', 'tasks.update')
+        ->middleware('permission');
+        Route::patch('/{task}', 'update')->defaults('permission', 'tasks.update')
+        ->middleware('permission');
+        Route::post('/{task}/check-in', 'checkIn')->defaults('permission', 'tasks.update')
+        ->middleware('permission');
+        Route::post('/{task}/complete', 'complete')->defaults('permission', 'tasks.update')
+        ->middleware('permission');
+        Route::post('/{task}/cancel', 'cancel')->defaults('permission', 'tasks.update')
+        ->middleware('permission');
+        Route::post('/{task}/notes', 'storeNote')->defaults('permission', 'tasks.update')
+        ->middleware('permission');
+        Route::delete('/{task}', 'destroy')->defaults('permission', 'tasks.delete')
+        ->middleware('permission');
     });
 
     Route::prefix('user-mappings')->group(function () {

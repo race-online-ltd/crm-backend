@@ -468,4 +468,74 @@ class LeadController extends Controller
             'deleted_at' => $lead->deleted_at,
         ];
     }
+
+
+
+public function getLeadPipeline(Request $request): JsonResponse
+{
+    $perPage = (int) $request->get('per_page', 10);
+    $page = (int) $request->get('page', 1);
+
+    $authUser = $request->user();
+
+    if (!$authUser) {
+        return response()->json([
+            'message' => 'Unauthenticated'
+        ], 401);
+    }
+
+   $defaultData = DB::table('user_default_mappings as udm')
+        ->join('users as u', 'u.id', '=', 'udm.user_id')
+        ->join('business_entities as be', 'be.id', '=', 'udm.business_entity_id')
+        ->join('users as uk', 'uk.id', '=', 'udm.kam_id')
+        ->join('teams as t', 't.id', '=', 'udm.team_id')
+        ->join('groups as g', 'g.id', '=', 'udm.group_id')
+        ->join('divisions as d', 'd.id', '=', 'udm.division_id')
+        ->where('udm.user_id', $authUser->id)
+        ->where('u.status', 1)
+        ->where('t.status', 1)
+        ->where('g.status', 1)
+        ->select([
+            'udm.user_id',
+            'u.user_name',
+            'u.full_name',
+            'udm.business_entity_id',
+            'be.name as business_entity_name',
+            'udm.kam_id',
+            'uk.full_name as kam_name',
+            'udm.team_id',
+            't.name as team_name',
+            'udm.group_id',
+            'g.name as group_name',
+            'udm.division_id',
+            'd.name as division_name'
+        ])
+        ->orderBy('udm.user_id', 'desc')
+        ->first();
+
+        $businessEntityId = $defaultData->business_entity_id;
+        $kamId = $defaultData->kam_id;
+
+    // ✅ stages fetch
+    $stagePiplines = DB::table('lead_pipeline_stages')
+        ->whereIn('business_entity_id', [$businessEntityId])
+        ->where('is_active', 1)
+        ->orderBy('sort_order', 'asc')
+        ->get();
+
+    return response()->json([
+        'message' => 'Lead pipeline stages fetched successfully.',
+        'data' => $stagePiplines,
+        // 'meta' => [
+        //     'current_page' => $paginator->currentPage(),
+        //     'last_page' => $paginator->lastPage(),
+        //     'per_page' => $paginator->perPage(),
+        //     'total' => $paginator->total(),
+        // ]
+    ]);
+}
+
+
+
+
 }

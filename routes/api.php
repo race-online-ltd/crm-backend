@@ -446,6 +446,7 @@ Route::middleware('auth:api')->group(function (): void {
     });
 
     Route::prefix('leads')->controller(LeadController::class)->group(function (): void {
+        Route::get('/stage-pipeline', 'getLeadPipeline');
         Route::get('/options', 'options');
         Route::get('/', 'index');
         Route::post('/', 'store');
@@ -453,6 +454,8 @@ Route::middleware('auth:api')->group(function (): void {
         Route::put('/{lead}', 'update');
         Route::patch('/{lead}', 'update');
         Route::delete('/{lead}', 'destroy');
+
+
     });
 
     Route::prefix('tasks')->controller(TaskController::class)->group(function (): void {

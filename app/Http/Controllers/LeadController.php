@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
+use Carbon\Carbon;
 
 class LeadController extends Controller
 {
@@ -485,4 +486,390 @@ class LeadController extends Controller
             'deleted_at' => $lead->deleted_at,
         ];
     }
+
+
+
+// public function getLeadPipeline(Request $request): JsonResponse
+// {
+//     $perPage = (int) $request->get('per_page', 10);
+//     $page = (int) $request->get('page', 1);
+
+//     $authUser = $request->user();
+
+//     if (!$authUser) {
+//         return response()->json([
+//             'message' => 'Unauthenticated'
+//         ], 401);
+//     }
+
+//    $defaultData = DB::table('user_default_mappings as udm')
+//         ->join('users as u', 'u.id', '=', 'udm.user_id')
+//         ->join('business_entities as be', 'be.id', '=', 'udm.business_entity_id')
+//         ->join('users as uk', 'uk.id', '=', 'udm.kam_id')
+//         ->join('teams as t', 't.id', '=', 'udm.team_id')
+//         ->join('groups as g', 'g.id', '=', 'udm.group_id')
+//         ->join('divisions as d', 'd.id', '=', 'udm.division_id')
+//         ->where('udm.user_id', $authUser->id)
+//         ->where('u.status', 1)
+//         ->where('t.status', 1)
+//         ->where('g.status', 1)
+//         ->select([
+//             'udm.user_id',
+//             'u.user_name',
+//             'u.full_name',
+//             'udm.business_entity_id',
+//             'be.name as business_entity_name',
+//             'udm.kam_id',
+//             'uk.full_name as kam_name',
+//             'udm.team_id',
+//             't.name as team_name',
+//             'udm.group_id',
+//             'g.name as group_name',
+//             'udm.division_id',
+//             'd.name as division_name'
+//         ])
+//         ->orderBy('udm.user_id', 'desc')
+//         ->first();
+
+//         $businessEntityId = $defaultData->business_entity_id;
+//         $kamId = $defaultData->kam_id;
+
+//     // ✅ stages fetch
+//     $stagePiplines = DB::table('lead_pipeline_stages')
+//         ->whereIn('business_entity_id', [$businessEntityId])
+//         ->where('is_active', 1)
+//         ->orderBy('sort_order', 'asc')
+//         ->get();
+
+//     $leads = DB::select("SELECT
+//                     l.id,
+//                     l.business_entity_id,
+//                     be.name AS business_entity_name,
+
+//                     l.source_id,
+//                     s.name AS source_name,
+//                     l.source_info,
+
+//                     l.lead_assign_id,
+//                     la.name AS assign_type,
+
+//                     l.kam_id,
+//                     uk.full_name AS kam_name,
+
+//                     l.backoffice_id,
+//                     bak.backoffice_name,
+//                     ub.full_name AS backoffice_user,
+
+//                     l.client_id,
+//                     c.client_name,
+
+//                     l.lead_pipeline_stage_id,
+//                     lps.stage_name,
+
+//                     l.expected_revenue,
+//                     l.deadline,
+
+//                     uc.user_name AS created_by,
+//                     uu.user_name AS updated_by,
+
+//                     l.created_at,
+//                     l.updated_at
+
+//                 FROM leads l
+//                 INNER JOIN business_entities be ON be.id = l.business_entity_id
+//                 INNER JOIN sources s ON s.id = l.source_id
+//                 INNER JOIN lead_assign la ON la.id = l.lead_assign_id
+//                 INNER JOIN users uk ON uk.id = l.kam_id
+//                 INNER JOIN backoffice bak ON bak.business_entity_id = l.business_entity_id
+//                 LEFT JOIN backoffice_user_mapping bum ON bum.backoffice_id = l.backoffice_id
+//                 LEFT JOIN users ub ON ub.id = bum.user_id
+//                 INNER JOIN clients c ON c.id = l.client_id
+//                 INNER JOIN lead_pipeline_stages lps ON lps.id = l.lead_pipeline_stage_id
+//                 INNER JOIN users uc ON uc.id = l.created_by
+//                 INNER JOIN users uu ON uu.id = l.updated_by
+
+//                 WHERE l.business_entity_id = ?
+//                 AND l.kam_id = ?
+//                 ", [$businessEntityId, $kamId]);
+
+
+//             $groupedLeads = collect($leads)->groupBy('lead_pipeline_stage_id');
+
+//             $stageData = collect($stagePiplines)->map(function ($stage) use ($groupedLeads) {
+
+//                 $leads = $groupedLeads[$stage->id] ?? collect([]);
+
+//                 return [
+//                     'stage_id' => $stage->id,
+//                     'stage_name' => $stage->stage_name,
+//                     'lead_count' => $leads->count(),
+//                     'expected_revenue_sum' => $leads->sum(function ($lead) {
+//                         return (float) $lead->expected_revenue;
+//                     }),
+
+//                     'leads' => $leads->values(), // reset index (optional but cleaner)
+//                 ];
+//             });
+//             return response()->json([
+//                 'message' => 'Lead pipeline stages fetched successfully.',
+//                 'data' => [
+//                     'default' => $defaultData,
+//                     'stages' => $stageData
+//                 ],
+//             ]);
+
+// }
+
+public function getLeadPipeline(Request $request): JsonResponse
+{
+    $perPage = (int) $request->get('per_page', 2);
+    $page = (int) $request->get('page', 1);
+
+    $authUser = $request->user();
+
+    if (!$authUser) {
+        return response()->json([
+            'message' => 'Unauthenticated'
+        ], 401);
+    }
+
+    $defaultData = DB::table('user_default_mappings as udm')
+        ->join('users as u', 'u.id', '=', 'udm.user_id')
+        ->join('business_entities as be', 'be.id', '=', 'udm.business_entity_id')
+        ->join('users as uk', 'uk.id', '=', 'udm.kam_id')
+        ->join('teams as t', 't.id', '=', 'udm.team_id')
+        ->join('groups as g', 'g.id', '=', 'udm.group_id')
+        ->join('divisions as d', 'd.id', '=', 'udm.division_id')
+        ->where('udm.user_id', $authUser->id)
+        ->where('u.status', 1)
+        ->where('t.status', 1)
+        ->where('g.status', 1)
+        ->select([
+            'udm.user_id',
+            'u.user_name',
+            'u.full_name',
+            'udm.business_entity_id',
+            'be.name as business_entity_name',
+            'udm.kam_id',
+            'uk.full_name as kam_name',
+            'udm.team_id',
+            't.name as team_name',
+            'udm.group_id',
+            'g.name as group_name',
+            'udm.division_id',
+            'd.name as division_name'
+        ])
+        ->orderBy('udm.user_id', 'desc')
+        ->first();
+
+    $businessEntityId = $defaultData->business_entity_id;
+    $kamId = $defaultData->kam_id;
+
+
+
+    // current month range
+    $startOfMonth = Carbon::now()->startOfMonth();
+    $endOfMonth = Carbon::now()->endOfMonth();
+
+    // get stage IDs for won & lost
+    $wonStageIds = DB::table('lead_pipeline_stages')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('stage_name', 'Won')
+        ->pluck('id');
+
+    $lostStageIds = DB::table('lead_pipeline_stages')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('stage_name', 'Lost')
+        ->pluck('id');
+
+    // total leads (current month)
+    $baseQuery = DB::table('leads')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('kam_id', $kamId)
+        ->whereBetween('created_at', [$startOfMonth, $endOfMonth]);
+
+    // ✅ counts
+    $wonCount = (clone $baseQuery)
+        ->whereIn('lead_pipeline_stage_id', $wonStageIds)
+        ->count();
+
+    $lostCount = (clone $baseQuery)
+        ->whereIn('lead_pipeline_stage_id', $lostStageIds)
+        ->count();
+
+    $activeCount = (clone $baseQuery)
+        ->whereNotIn('lead_pipeline_stage_id', $wonStageIds->merge($lostStageIds))
+        ->count();
+        // ✅ forward count (current month)
+    $forwardCount = DB::table('lead_assign_histories')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('from_type', 1) // 1 = KAM
+        ->where('from_id', $kamId)
+        ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+        ->count();
+
+    // final summary
+    $summary = [
+        'won_lead_count' => $wonCount,
+        'lost_lead_count' => $lostCount,
+        'active_lead_count' => $activeCount,
+        'forward_lead_count' => $forwardCount, // new metric
+    ];
+
+    // ✅ stages fetch (unchanged)
+    $stagePiplines = DB::table('lead_pipeline_stages')
+        ->whereIn('business_entity_id', [$businessEntityId])
+        ->where('is_active', 1)
+        ->orderBy('sort_order', 'asc')
+        ->get();
+
+    // ✅ leads fetch (unchanged)
+    $leads = DB::select("SELECT
+                    l.id,
+                    l.business_entity_id,
+                    be.name AS business_entity_name,
+
+                    l.source_id,
+                    s.name AS source_name,
+                    l.source_info,
+
+                    l.lead_assign_id,
+                    la.name AS assign_type,
+
+                    l.kam_id,
+                    uk.full_name AS kam_name,
+
+                    l.backoffice_id,
+                    bak.backoffice_name,
+                    ub.full_name AS backoffice_user,
+
+                    l.client_id,
+                    c.client_name,
+
+                    l.lead_pipeline_stage_id,
+                    lps.stage_name,
+
+                    l.expected_revenue,
+                    l.deadline,
+
+                    uc.user_name AS created_by,
+                    uu.user_name AS updated_by,
+
+                    l.created_at,
+                    l.updated_at
+
+                FROM leads l
+                INNER JOIN business_entities be ON be.id = l.business_entity_id
+                INNER JOIN sources s ON s.id = l.source_id
+                INNER JOIN lead_assign la ON la.id = l.lead_assign_id
+                INNER JOIN users uk ON uk.id = l.kam_id
+                INNER JOIN backoffice bak ON bak.business_entity_id = l.business_entity_id
+                LEFT JOIN backoffice_user_mapping bum ON bum.backoffice_id = l.backoffice_id
+                LEFT JOIN users ub ON ub.id = bum.user_id
+                INNER JOIN clients c ON c.id = l.client_id
+                INNER JOIN lead_pipeline_stages lps ON lps.id = l.lead_pipeline_stage_id
+                INNER JOIN users uc ON uc.id = l.created_by
+                INNER JOIN users uu ON uu.id = l.updated_by
+
+                WHERE l.business_entity_id = ?
+                AND l.kam_id = ?
+                ", [$businessEntityId, $kamId]);
+
+    // ✅ ADD: collect leads
+    $leads = collect($leads);
+
+    // ✅ ADD: get lead IDs
+    $leadIds = $leads->pluck('id')->toArray();
+
+    // ✅ ADD: products
+    $products = DB::table('lead_products as lp')
+        ->join('product as p', 'p.id', '=', 'lp.product_id')
+        ->whereIn('lp.lead_id', $leadIds)
+        ->select(
+            'lp.lead_id',
+            'p.id as product_id',
+            'p.product_name'
+        )
+        ->get()
+        ->groupBy('lead_id');
+
+    // ✅ ADD: attachments
+    $attachments = DB::table('lead_attachments')
+        ->whereIn('lead_id', $leadIds)
+        ->get()
+        ->groupBy('lead_id');
+
+    // ✅ ADD: attach to lead
+    $leads = $leads->map(function ($lead) use ($products, $attachments) {
+
+        $lead->products = $products[$lead->id] ?? [];
+        $lead->attachments = $attachments[$lead->id] ?? [];
+
+        return $lead;
+    });
+
+    // ✅ unchanged grouping
+    $groupedLeads = $leads->groupBy('lead_pipeline_stage_id');
+
+    // $stageData = collect($stagePiplines)->map(function ($stage) use ($groupedLeads) {
+
+    //         $leads = $groupedLeads[$stage->id] ?? collect([]);
+
+    //         // ✅ push into stage object
+    //         $stage->lead_count = $leads->count();
+    //         $stage->expected_revenue_sum = $leads->sum(function ($lead) {
+    //             return (float) $lead->expected_revenue;
+    //         });
+
+    //         return [
+    //             'stage' => $stage, // now includes count + sum inside
+    //             'leads' => $leads->values(),
+    //         ];
+    //     });
+
+    $stageData = collect($stagePiplines)->map(function ($stage) use ($groupedLeads, $perPage, $page) {
+
+    $allLeads = collect($groupedLeads[$stage->id] ?? []);
+
+    $total = $allLeads->count();
+
+    // pagination logic
+    $offset = ($page - 1) * $perPage;
+
+    $paginatedLeads = $allLeads
+        ->slice($offset, $perPage)
+        ->values();
+
+    // existing logic (unchanged)
+    $stage->lead_count = $total;
+
+    $stage->expected_revenue_sum = $allLeads->sum(function ($lead) {
+        return (float) $lead->expected_revenue;
+    });
+
+    return [
+        'stage' => $stage,
+
+        // ✅ keep leads as array (as you want)
+        'leads' => $paginatedLeads,
+
+        // ✅ add pagination separately
+        'pagination' => [
+            'current_page' => $page,
+            'per_page' => $perPage,
+            'total' => $total,
+        ],
+    ];
+});
+
+    return response()->json([
+        'message' => 'Lead pipeline stages fetched successfully.',
+        'data' => [
+            'summary' => $summary,
+            'default' => $defaultData,
+            'stages' => $stageData
+        ],
+    ]);
+}
+
 }

@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Auth;
 use App\Models\UserBackofficeMapping;
+use App\Models\UserTeamMapping;
 use Carbon\Carbon;
 
 class LeadController extends Controller
@@ -737,11 +738,6 @@ private function getLeadSummaryData(
         ->count();
 
     // ✅ FORWARD
-    // $forwardQuery = DB::table('lead_assign_histories')
-    //     ->where('business_entity_id', $businessEntityId)
-    //     ->where('from_type', 1)
-    //     ->where('from_id', $kamId)
-    //     ->whereBetween('created_at', [$startDate, $endDate]);
     $forwardQuery = DB::table('lead_assign_histories as lah')
     ->join('leads as l', 'l.id', '=', 'lah.lead_id')
     ->where('lah.business_entity_id', $businessEntityId)
@@ -818,41 +814,46 @@ public function getLeadPipeline(Request $request): JsonResponse
         ], 401);
     }
 
-    $defaultData = DB::table('user_default_mappings as udm')
-        ->join('users as u', 'u.id', '=', 'udm.user_id')
-        ->join('business_entities as be', 'be.id', '=', 'udm.business_entity_id')
-        ->join('users as uk', 'uk.id', '=', 'udm.kam_id')
-        ->join('teams as t', 't.id', '=', 'udm.team_id')
-        ->join('groups as g', 'g.id', '=', 'udm.group_id')
-        ->join('divisions as d', 'd.id', '=', 'udm.division_id')
-        ->where('udm.user_id', $authUser->id)
-        ->where('u.status', 1)
-        ->where('t.status', 1)
-        ->where('g.status', 1)
+    $defaultData = DB::table('user_default_mappings' )
+        ->where('user_id', $authUser->id)
         ->select([
-            'udm.user_id',
-            'u.user_name',
-            'u.full_name',
-            'udm.business_entity_id',
-            'be.name as business_entity_name',
-            'udm.kam_id',
-            'uk.full_name as kam_name',
-            'udm.team_id',
-            't.name as team_name',
-            'udm.group_id',
-            'g.name as group_name',
-            'udm.division_id',
-            'd.name as division_name'
+            'user_id',
+            'business_entity_id',
+            'kam_id',
+            'team_id',
+            'group_id',
+            'division_id',
         ])
-        ->orderBy('udm.user_id', 'desc')
         ->first();
 
-    $businessEntityId = $defaultData->business_entity_id;
-    $kamId = $defaultData->kam_id;
+    // ✅ DEFAULT VALUES
+    $businessEntityId = $request->business_entity_id ?? $defaultData->business_entity_id;
+    $kamId = $request->kam_id ?? $defaultData->kam_id;
+    $teamId = $request->team_id ?? $defaultData->team_id;
+
+    // ✅ DATE FILTER (mandatory if any filter used)
+    $fromDate = $request->from_date;
+    $toDate = $request->to_date;
+    if ($fromDate && $toDate) {
+    $startDate = Carbon::parse($fromDate)->startOfDay();
+    $endDate = Carbon::parse($toDate)->endOfDay();
+    } else {
+        // ✅ default current month
+        $startDate = Carbon::now()->startOfMonth();
+        $endDate = Carbon::now()->endOfMonth();
+    }
+
+
 
     $backofficeIds = UserBackofficeMapping::query()
         ->where('user_id', $authUser->id)
         ->pluck('backoffice_id')
+        ->toArray();
+
+    $teamUserIds = UserTeamMapping::query()
+        ->where('user_id', $authUser->id)
+        ->where('team_id', $teamId)
+        ->pluck('user_id')
         ->toArray();
 
 
@@ -877,63 +878,16 @@ public function getLeadPipeline(Request $request): JsonResponse
         ->where('stage_name', 'Cancelled')
         ->pluck('id');
 
-    // // total leads (current month)
-    // $baseQuery = DB::table('leads')
-    //     ->where('business_entity_id', $businessEntityId)
-    //     ->where('kam_id', $kamId)
-    //     ->whereBetween('created_at', [$startOfMonth, $endOfMonth]);
-
-    // // ✅ counts
-    // $wonCount = (clone $baseQuery)
-    //     ->whereIn('lead_pipeline_stage_id', $wonStageIds)
-    //     ->count();
-
-    // $lostCount = (clone $baseQuery)
-    //     ->whereIn('lead_pipeline_stage_id', $lostStageIds)
-    //     ->count();
-
-    // $cancelledCount = (clone $baseQuery)
-    //     ->whereIn('lead_pipeline_stage_id', $cancelStageIds)
-    //     ->count();
-
-    // $activeCount = (clone $baseQuery)
-    //     ->whereNotIn('lead_pipeline_stage_id', $wonStageIds->merge($lostStageIds)->merge($cancelStageIds))
-    //     ->count();
-
-    //     // ✅ forward count (current month)
-    // $forwardCount = DB::table('lead_assign_histories')
-    //     ->where('business_entity_id', $businessEntityId)
-    //     ->where('from_type', 1) // 1 = KAM
-    //     ->where('from_id', $kamId)
-    //     ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
-    //     ->count();
-
-    // $backofficePendingCount = DB::table('leads')
-    //     ->where('business_entity_id', $businessEntityId)
-    //     ->whereIn('backoffice_id', $backofficeIds)
-    //     ->whereNull('kam_id')
-    //     ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
-    //     ->count();
-
-    // // final summary
-    // $summary = [
-    //     'won_lead_count' => $wonCount,
-    //     'lost_lead_count' => $lostCount,
-    //     'cancelled_lead_count' => $cancelledCount,
-    //     'active_lead_count' => $activeCount,
-    //     'forward_lead_count' => $forwardCount, // new metric
-    //     'backoffice_pending_count' => $backofficePendingCount,
-    // ];
 
     $summary = $this->getLeadSummaryData(
-    $request,
-    $businessEntityId,
-    $kamId,
-    $backofficeIds,
-    $wonStageIds,
-    $lostStageIds,
-    $cancelStageIds
-);
+                $request,
+                $businessEntityId,
+                $kamId,
+                $backofficeIds,
+                $wonStageIds,
+                $lostStageIds,
+                $cancelStageIds
+            );
 
     // ✅ stages fetch (unchanged)
     $stagePiplines = DB::table('lead_pipeline_stages')
@@ -942,59 +896,52 @@ public function getLeadPipeline(Request $request): JsonResponse
         ->orderBy('sort_order', 'asc')
         ->get();
 
-    // ✅ leads fetch (unchanged)
-    $leads = DB::select("SELECT
-                    l.id,
-                    l.business_entity_id,
-                    be.name AS business_entity_name,
+    $query = DB::table('leads as l')
+    ->join('business_entities as be', 'be.id', '=', 'l.business_entity_id')
+    ->join('sources as s', 's.id', '=', 'l.source_id')
+    ->join('lead_assign as la', 'la.id', '=', 'l.lead_assign_id')
+    ->join('users as uk', 'uk.id', '=', 'l.kam_id')
+    ->join('backoffice as bak', 'bak.business_entity_id', '=', 'l.business_entity_id')
+    ->leftJoin('backoffice_user_mapping as bum', 'bum.backoffice_id', '=', 'l.backoffice_id')
+    ->leftJoin('users as ub', 'ub.id', '=', 'bum.user_id')
+    ->join('clients as c', 'c.id', '=', 'l.client_id')
+    ->join('lead_pipeline_stages as lps', 'lps.id', '=', 'l.lead_pipeline_stage_id')
+    ->join('users as uc', 'uc.id', '=', 'l.created_by')
+    ->join('users as uu', 'uu.id', '=', 'l.updated_by')
+    ->where('l.business_entity_id', $businessEntityId)
+    ->where('l.kam_id', $kamId)
+    ->whereBetween('l.created_at', [$startDate, $endDate]); // ✅ FIX
 
-                    l.source_id,
-                    s.name AS source_name,
-                    l.source_info,
+// ✅ TEAM FILTER
+if ($request->team_id) {
+    $query->whereIn('l.kam_id', $teamUserIds);
+}
 
-                    l.lead_assign_id,
-                    la.name AS assign_type,
-
-                    l.kam_id,
-                    uk.full_name AS kam_name,
-
-                    l.backoffice_id,
-                    bak.backoffice_name,
-                    ub.full_name AS backoffice_user,
-
-                    l.client_id,
-                    c.client_name,
-
-                    l.lead_pipeline_stage_id,
-                    lps.stage_name,
-
-                    l.expected_revenue,
-                    l.deadline,
-
-                    uc.user_name AS created_by,
-                    uu.user_name AS updated_by,
-
-                    l.created_at,
-                    l.updated_at
-
-                FROM leads l
-                INNER JOIN business_entities be ON be.id = l.business_entity_id
-                INNER JOIN sources s ON s.id = l.source_id
-                INNER JOIN lead_assign la ON la.id = l.lead_assign_id
-                INNER JOIN users uk ON uk.id = l.kam_id
-                INNER JOIN backoffice bak ON bak.business_entity_id = l.business_entity_id
-                LEFT JOIN backoffice_user_mapping bum ON bum.backoffice_id = l.backoffice_id
-                LEFT JOIN users ub ON ub.id = bum.user_id
-                INNER JOIN clients c ON c.id = l.client_id
-                INNER JOIN lead_pipeline_stages lps ON lps.id = l.lead_pipeline_stage_id
-                INNER JOIN users uc ON uc.id = l.created_by
-                INNER JOIN users uu ON uu.id = l.updated_by
-
-                WHERE l.business_entity_id = ?
-                AND l.kam_id = ?
-                ", [$businessEntityId, $kamId]);
-
-    // ✅ ADD: collect leads
+$leads = $query->select(
+    'l.id',
+    'l.business_entity_id',
+    'be.name as business_entity_name',
+    'l.source_id',
+    's.name as source_name',
+    'l.source_info',
+    'l.lead_assign_id',
+    'la.name as assign_type',
+    'l.kam_id',
+    'uk.full_name as kam_name',
+    'l.backoffice_id',
+    'bak.backoffice_name',
+    'ub.full_name as backoffice_user',
+    'l.client_id',
+    'c.client_name',
+    'l.lead_pipeline_stage_id',
+    'lps.stage_name',
+    'l.expected_revenue',
+    'l.deadline',
+    'uc.user_name as created_by',
+    'uu.user_name as updated_by',
+    'l.created_at',
+    'l.updated_at'
+)->get();
     $leads = collect($leads);
 
     // ✅ ADD: get lead IDs

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Source;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +16,8 @@ class Task extends Model
     protected $fillable = [
         'lead_id',
         'client_id',
+        'source_id',
+        'source_info',
         'assigned_to_user_id',
         'created_by_user_id',
         'assignment_mode',
@@ -43,6 +46,7 @@ class Task extends Model
     protected $casts = [
         'lead_id' => 'integer',
         'client_id' => 'integer',
+        'source_id' => 'integer',
         'assigned_to_user_id' => 'integer',
         'created_by_user_id' => 'integer',
         'task_type_id' => 'integer',
@@ -72,6 +76,11 @@ class Task extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class, 'client_id');
+    }
+
+    public function source(): BelongsTo
+    {
+        return $this->belongsTo(Source::class, 'source_id');
     }
 
     public function assignedToUser(): BelongsTo

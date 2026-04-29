@@ -18,6 +18,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Auth;
+use App\Models\UserBackofficeMapping;
 use Carbon\Carbon;
 
 class LeadController extends Controller
@@ -620,6 +628,183 @@ class LeadController extends Controller
 
 // }
 
+
+
+
+private function getLeadSummaryData(
+    Request $request,
+    $businessEntityId,
+    $kamId,
+    $backofficeIds,
+    $wonStageIds,
+    $lostStageIds,
+    $cancelStageIds
+) {
+
+    // 🔥 Date handling
+    $fromDate = $request->from_date;
+    $toDate = $request->to_date;
+
+    if ($fromDate && $toDate) {
+        $startDate = Carbon::parse($fromDate)->startOfDay();
+        $endDate = Carbon::parse($toDate)->endOfDay();
+
+        $prevStart = (clone $startDate)->subMonth()->startOfMonth();
+        $prevEnd = (clone $startDate)->subMonth()->endOfMonth();
+
+        $label = Carbon::parse($fromDate)->format('M d') . ' - ' . Carbon::parse($toDate)->format('M d');
+
+    } else {
+        $startDate = Carbon::now()->startOfMonth();
+        $endDate = Carbon::now()->endOfMonth();
+
+        $prevStart = Carbon::now()->subMonth()->startOfMonth();
+        $prevEnd = Carbon::now()->subMonth()->endOfMonth();
+
+        $label = Carbon::now()->format('F Y');
+    }
+
+    // 🔥 Base query (filters সহ)
+    $baseQuery = DB::table('leads')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('kam_id', $kamId)
+        ->when($request->team_id, fn($q) => $q->where('team_id', $request->team_id))
+        ->when($request->group_id, fn($q) => $q->where('group_id', $request->group_id))
+        ->whereBetween('created_at', [$startDate, $endDate]);
+
+    // 🔥 Helper (count + revenue)
+    $getCountRevenue = function ($query) {
+        return [
+            'count' => (clone $query)->count(),
+            'revenue' => (clone $query)->sum('expected_revenue'),
+        ];
+    };
+
+    // ✅ WON
+    $won = $getCountRevenue(
+        (clone $baseQuery)->whereIn('lead_pipeline_stage_id', $wonStageIds)
+    );
+
+    $wonPrev = DB::table('leads')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('kam_id', $kamId)
+        ->whereBetween('created_at', [$prevStart, $prevEnd])
+        ->whereIn('lead_pipeline_stage_id', $wonStageIds)
+        ->count();
+
+    // ✅ LOST
+    $lost = $getCountRevenue(
+        (clone $baseQuery)->whereIn('lead_pipeline_stage_id', $lostStageIds)
+    );
+
+    $lostPrev = DB::table('leads')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('kam_id', $kamId)
+        ->whereBetween('created_at', [$prevStart, $prevEnd])
+        ->whereIn('lead_pipeline_stage_id', $lostStageIds)
+        ->count();
+
+    // ✅ CANCELLED
+    $cancelled = $getCountRevenue(
+        (clone $baseQuery)->whereIn('lead_pipeline_stage_id', $cancelStageIds)
+    );
+
+    $cancelledPrev = DB::table('leads')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('kam_id', $kamId)
+        ->whereBetween('created_at', [$prevStart, $prevEnd])
+        ->whereIn('lead_pipeline_stage_id', $cancelStageIds)
+        ->count();
+
+    // ✅ ACTIVE (no date filter)
+    $activeQuery = DB::table('leads')
+        ->where('business_entity_id', $businessEntityId)
+        ->where('kam_id', $kamId)
+        ->whereNotIn(
+            'lead_pipeline_stage_id',
+            $wonStageIds->merge($lostStageIds)->merge($cancelStageIds)
+        );
+
+    $active = [
+        'count' => (clone $activeQuery)->count(),
+        'revenue' => (clone $activeQuery)->sum('expected_revenue'),
+    ];
+
+    $last24 = Carbon::now()->subHours(24);
+
+    $activeLast24 = (clone $activeQuery)
+        ->where('created_at', '>=', $last24)
+        ->count();
+
+    // ✅ FORWARD
+    // $forwardQuery = DB::table('lead_assign_histories')
+    //     ->where('business_entity_id', $businessEntityId)
+    //     ->where('from_type', 1)
+    //     ->where('from_id', $kamId)
+    //     ->whereBetween('created_at', [$startDate, $endDate]);
+    $forwardQuery = DB::table('lead_assign_histories as lah')
+    ->join('leads as l', 'l.id', '=', 'lah.lead_id')
+    ->where('lah.business_entity_id', $businessEntityId)
+    ->where('lah.from_type', 1)
+    ->where('lah.from_id', $kamId)
+    ->whereBetween('lah.created_at', [$startDate, $endDate]);
+
+    $forward = [
+        'count' => (clone $forwardQuery)->count(),
+        'revenue' => (clone $forwardQuery)->sum('l.expected_revenue'),
+    ];
+
+    $forwardLast24 = (clone $forwardQuery)
+    ->where('lah.created_at', '>=', now()->subHours(24))
+    ->count();
+
+    // ✅ BACKOFFICE
+    $backofficeQuery = DB::table('leads')
+        ->where('business_entity_id', $businessEntityId)
+        ->whereIn('backoffice_id', $backofficeIds)
+        ->whereNull('kam_id')
+        ->whereBetween('created_at', [$startDate, $endDate]);
+
+    $backoffice = [
+        'count' => (clone $backofficeQuery)->count(),
+        'revenue' => (clone $backofficeQuery)->sum('expected_revenue'),
+    ];
+
+    $backofficeLast24 = (clone $backofficeQuery)
+        ->where('created_at', '>=', $last24)
+        ->count();
+
+    // ✅ FINAL RETURN
+    return [
+        'label' => $label,
+
+        'won_lead_count' => $won['count'],
+        'won_previous_month_lead_count' => $wonPrev,
+        'won_lead_revenew' => $won['revenue'],
+
+        'lost_lead_count' => $lost['count'],
+        'lost_previous_month_lead_count' => $lostPrev,
+        'lost_lead_revenue' => $lost['revenue'],
+
+        'cancelled_lead_count' => $cancelled['count'],
+        'cancelled_previous_month_lead_count' => $cancelledPrev,
+        'cancelled_lead_revenue' => $cancelled['revenue'],
+
+        'active_lead_count' => $active['count'],
+        'active_lead_revenue' => $active['revenue'],
+        'active_last_twienty_four_hour_lead_count' => $activeLast24,
+
+        'forward_lead_count' => $forward['count'],
+        'forward_lead_revenew' => $forward['revenue'],
+        'forward_last_twentity_four_hour_lead_count' => $forwardLast24,
+
+        'backoffice_pending_count' => $backoffice['count'],
+        'backoffice_pending_revenue' => $backoffice['revenue'],
+        'backoffice_pending_last_twienty_four_hour_count' => $backofficeLast24,
+    ];
+}
+
+
 public function getLeadPipeline(Request $request): JsonResponse
 {
     $perPage = (int) $request->get('per_page', 2);
@@ -665,11 +850,16 @@ public function getLeadPipeline(Request $request): JsonResponse
     $businessEntityId = $defaultData->business_entity_id;
     $kamId = $defaultData->kam_id;
 
+    $backofficeIds = UserBackofficeMapping::query()
+        ->where('user_id', $authUser->id)
+        ->pluck('backoffice_id')
+        ->toArray();
 
 
-    // current month range
-    $startOfMonth = Carbon::now()->startOfMonth();
-    $endOfMonth = Carbon::now()->endOfMonth();
+
+    // // current month range
+    // $startOfMonth = Carbon::now()->startOfMonth();
+    // $endOfMonth = Carbon::now()->endOfMonth();
 
     // get stage IDs for won & lost
     $wonStageIds = DB::table('lead_pipeline_stages')
@@ -682,39 +872,68 @@ public function getLeadPipeline(Request $request): JsonResponse
         ->where('stage_name', 'Lost')
         ->pluck('id');
 
-    // total leads (current month)
-    $baseQuery = DB::table('leads')
+    $cancelStageIds = DB::table('lead_pipeline_stages')
         ->where('business_entity_id', $businessEntityId)
-        ->where('kam_id', $kamId)
-        ->whereBetween('created_at', [$startOfMonth, $endOfMonth]);
+        ->where('stage_name', 'Cancelled')
+        ->pluck('id');
 
-    // ✅ counts
-    $wonCount = (clone $baseQuery)
-        ->whereIn('lead_pipeline_stage_id', $wonStageIds)
-        ->count();
+    // // total leads (current month)
+    // $baseQuery = DB::table('leads')
+    //     ->where('business_entity_id', $businessEntityId)
+    //     ->where('kam_id', $kamId)
+    //     ->whereBetween('created_at', [$startOfMonth, $endOfMonth]);
 
-    $lostCount = (clone $baseQuery)
-        ->whereIn('lead_pipeline_stage_id', $lostStageIds)
-        ->count();
+    // // ✅ counts
+    // $wonCount = (clone $baseQuery)
+    //     ->whereIn('lead_pipeline_stage_id', $wonStageIds)
+    //     ->count();
 
-    $activeCount = (clone $baseQuery)
-        ->whereNotIn('lead_pipeline_stage_id', $wonStageIds->merge($lostStageIds))
-        ->count();
-        // ✅ forward count (current month)
-    $forwardCount = DB::table('lead_assign_histories')
-        ->where('business_entity_id', $businessEntityId)
-        ->where('from_type', 1) // 1 = KAM
-        ->where('from_id', $kamId)
-        ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
-        ->count();
+    // $lostCount = (clone $baseQuery)
+    //     ->whereIn('lead_pipeline_stage_id', $lostStageIds)
+    //     ->count();
 
-    // final summary
-    $summary = [
-        'won_lead_count' => $wonCount,
-        'lost_lead_count' => $lostCount,
-        'active_lead_count' => $activeCount,
-        'forward_lead_count' => $forwardCount, // new metric
-    ];
+    // $cancelledCount = (clone $baseQuery)
+    //     ->whereIn('lead_pipeline_stage_id', $cancelStageIds)
+    //     ->count();
+
+    // $activeCount = (clone $baseQuery)
+    //     ->whereNotIn('lead_pipeline_stage_id', $wonStageIds->merge($lostStageIds)->merge($cancelStageIds))
+    //     ->count();
+
+    //     // ✅ forward count (current month)
+    // $forwardCount = DB::table('lead_assign_histories')
+    //     ->where('business_entity_id', $businessEntityId)
+    //     ->where('from_type', 1) // 1 = KAM
+    //     ->where('from_id', $kamId)
+    //     ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+    //     ->count();
+
+    // $backofficePendingCount = DB::table('leads')
+    //     ->where('business_entity_id', $businessEntityId)
+    //     ->whereIn('backoffice_id', $backofficeIds)
+    //     ->whereNull('kam_id')
+    //     ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+    //     ->count();
+
+    // // final summary
+    // $summary = [
+    //     'won_lead_count' => $wonCount,
+    //     'lost_lead_count' => $lostCount,
+    //     'cancelled_lead_count' => $cancelledCount,
+    //     'active_lead_count' => $activeCount,
+    //     'forward_lead_count' => $forwardCount, // new metric
+    //     'backoffice_pending_count' => $backofficePendingCount,
+    // ];
+
+    $summary = $this->getLeadSummaryData(
+    $request,
+    $businessEntityId,
+    $kamId,
+    $backofficeIds,
+    $wonStageIds,
+    $lostStageIds,
+    $cancelStageIds
+);
 
     // ✅ stages fetch (unchanged)
     $stagePiplines = DB::table('lead_pipeline_stages')
@@ -810,22 +1029,6 @@ public function getLeadPipeline(Request $request): JsonResponse
 
     // ✅ unchanged grouping
     $groupedLeads = $leads->groupBy('lead_pipeline_stage_id');
-
-    // $stageData = collect($stagePiplines)->map(function ($stage) use ($groupedLeads) {
-
-    //         $leads = $groupedLeads[$stage->id] ?? collect([]);
-
-    //         // ✅ push into stage object
-    //         $stage->lead_count = $leads->count();
-    //         $stage->expected_revenue_sum = $leads->sum(function ($lead) {
-    //             return (float) $lead->expected_revenue;
-    //         });
-
-    //         return [
-    //             'stage' => $stage, // now includes count + sum inside
-    //             'leads' => $leads->values(),
-    //         ];
-    //     });
 
     $stageData = collect($stagePiplines)->map(function ($stage) use ($groupedLeads, $perPage, $page) {
 

@@ -454,6 +454,8 @@ Route::middleware('auth:api')->group(function (): void {
         Route::put('/{lead}', 'update');
         Route::patch('/{lead}', 'update');
         Route::delete('/{lead}', 'destroy');
+        Route::post('/{lead}/forward', 'forwardLead'); // forward to another KAM
+        Route::patch('/{lead}/stage', 'updateStage'); // move to another stage in pipeline
 
 
     });

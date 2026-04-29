@@ -497,138 +497,101 @@ class LeadController extends Controller
     }
 
 
+// lead forworded to other kam or backoffice
+public function forwardLead(Request $request, Lead $lead): JsonResponse
+{
+    $validated = $request->validate([
+        'to_type' => ['required', 'integer', 'in:1,2,3'],
+        'to_id'   => ['required', 'integer'],
+        'note'    => ['nullable', 'string'],
+    ]);
 
-// public function getLeadPipeline(Request $request): JsonResponse
-// {
-//     $perPage = (int) $request->get('per_page', 10);
-//     $page = (int) $request->get('page', 1);
+    // to_id exists check — type অনুযায়ী
+    // 1=KAM(users), 2=Backoffice, 3=Helpdesk
+    $toTable = match((int) $validated['to_type']) {
+        1 => 'users',
+        2 => 'backoffice',
+        default => 'users',
+    };
 
-//     $authUser = $request->user();
+    $toExists = DB::table($toTable)->where('id', $validated['to_id'])->exists();
+    if (!$toExists) {
+        return response()->json(['message' => 'Selected recipient not found.'], 422);
+    }
 
-//     if (!$authUser) {
-//         return response()->json([
-//             'message' => 'Unauthenticated'
-//         ], 401);
-//     }
+    // from_type নির্ধারণ করো current lead এর assign type থেকে
+    $fromType = $lead->kam_id ? 1 : ($lead->backoffice_id ? 2 : 3);
+    $fromId   = $lead->kam_id ?? $lead->backoffice_id;
 
-//    $defaultData = DB::table('user_default_mappings as udm')
-//         ->join('users as u', 'u.id', '=', 'udm.user_id')
-//         ->join('business_entities as be', 'be.id', '=', 'udm.business_entity_id')
-//         ->join('users as uk', 'uk.id', '=', 'udm.kam_id')
-//         ->join('teams as t', 't.id', '=', 'udm.team_id')
-//         ->join('groups as g', 'g.id', '=', 'udm.group_id')
-//         ->join('divisions as d', 'd.id', '=', 'udm.division_id')
-//         ->where('udm.user_id', $authUser->id)
-//         ->where('u.status', 1)
-//         ->where('t.status', 1)
-//         ->where('g.status', 1)
-//         ->select([
-//             'udm.user_id',
-//             'u.user_name',
-//             'u.full_name',
-//             'udm.business_entity_id',
-//             'be.name as business_entity_name',
-//             'udm.kam_id',
-//             'uk.full_name as kam_name',
-//             'udm.team_id',
-//             't.name as team_name',
-//             'udm.group_id',
-//             'g.name as group_name',
-//             'udm.division_id',
-//             'd.name as division_name'
-//         ])
-//         ->orderBy('udm.user_id', 'desc')
-//         ->first();
+    DB::transaction(function () use ($lead, $validated, $fromType, $fromId, $request) {
 
-//         $businessEntityId = $defaultData->business_entity_id;
-//         $kamId = $defaultData->kam_id;
+        // history save করো
+        DB::table('lead_assign_histories')->insert([
+            'lead_id'            => $lead->id,
+            'business_entity_id' => $lead->business_entity_id,
+            'from_type'          => $fromType,
+            'from_id'            => $fromId,
+            'to_type'            => $validated['to_type'],
+            'to_id'              => $validated['to_id'],
+            'note'               => $validated['note'] ?? null,
+            'created_at'         => now(),
+            'updated_at'         => now(),
+        ]);
 
-//     // ✅ stages fetch
-//     $stagePiplines = DB::table('lead_pipeline_stages')
-//         ->whereIn('business_entity_id', [$businessEntityId])
-//         ->where('is_active', 1)
-//         ->orderBy('sort_order', 'asc')
-//         ->get();
+        // lead এ assign update করো
+        if ((int) $validated['to_type'] === 1) {
+            $lead->kam_id       = $validated['to_id'];
+            $lead->backoffice_id = null;
+        } elseif ((int) $validated['to_type'] === 2) {
+            $lead->backoffice_id = $validated['to_id'];
+            $lead->kam_id        = null;
+        }
 
-//     $leads = DB::select("SELECT
-//                     l.id,
-//                     l.business_entity_id,
-//                     be.name AS business_entity_name,
+        $lead->updated_by = $request->user()?->id;
+        $lead->save();
+    });
 
-//                     l.source_id,
-//                     s.name AS source_name,
-//                     l.source_info,
+    return response()->json([
+        'message' => 'Lead forwarded successfully.',
+        'data'    => ['lead_id' => $lead->id],
+    ]);
+}
 
-//                     l.lead_assign_id,
-//                     la.name AS assign_type,
+// update lead stage separately
+public function updateStage(Request $request, Lead $lead): JsonResponse
+{
+    $validated = $request->validate([
+        'lead_pipeline_stage_id' => [
+            'required',
+            'integer',
+            Rule::exists('lead_pipeline_stages', 'id'),
+        ],
+    ]);
 
-//                     l.kam_id,
-//                     uk.full_name AS kam_name,
+    // stage টা এই lead এর business_entity তে belong করে কিনা check
+    $stageBelongs = LeadPipelineStage::query()
+        ->where('id', $validated['lead_pipeline_stage_id'])
+        ->where('business_entity_id', $lead->business_entity_id)
+        ->exists();
 
-//                     l.backoffice_id,
-//                     bak.backoffice_name,
-//                     ub.full_name AS backoffice_user,
+    if (!$stageBelongs) {
+        return response()->json([
+            'message' => 'Selected stage does not belong to this lead\'s business entity.',
+        ], 422);
+    }
 
-//                     l.client_id,
-//                     c.client_name,
+    $lead->lead_pipeline_stage_id = $validated['lead_pipeline_stage_id'];
+    $lead->updated_by = $request->user()?->id;
+    $lead->save();
 
-//                     l.lead_pipeline_stage_id,
-//                     lps.stage_name,
-
-//                     l.expected_revenue,
-//                     l.deadline,
-
-//                     uc.user_name AS created_by,
-//                     uu.user_name AS updated_by,
-
-//                     l.created_at,
-//                     l.updated_at
-
-//                 FROM leads l
-//                 INNER JOIN business_entities be ON be.id = l.business_entity_id
-//                 INNER JOIN sources s ON s.id = l.source_id
-//                 INNER JOIN lead_assign la ON la.id = l.lead_assign_id
-//                 INNER JOIN users uk ON uk.id = l.kam_id
-//                 INNER JOIN backoffice bak ON bak.business_entity_id = l.business_entity_id
-//                 LEFT JOIN backoffice_user_mapping bum ON bum.backoffice_id = l.backoffice_id
-//                 LEFT JOIN users ub ON ub.id = bum.user_id
-//                 INNER JOIN clients c ON c.id = l.client_id
-//                 INNER JOIN lead_pipeline_stages lps ON lps.id = l.lead_pipeline_stage_id
-//                 INNER JOIN users uc ON uc.id = l.created_by
-//                 INNER JOIN users uu ON uu.id = l.updated_by
-
-//                 WHERE l.business_entity_id = ?
-//                 AND l.kam_id = ?
-//                 ", [$businessEntityId, $kamId]);
-
-
-//             $groupedLeads = collect($leads)->groupBy('lead_pipeline_stage_id');
-
-//             $stageData = collect($stagePiplines)->map(function ($stage) use ($groupedLeads) {
-
-//                 $leads = $groupedLeads[$stage->id] ?? collect([]);
-
-//                 return [
-//                     'stage_id' => $stage->id,
-//                     'stage_name' => $stage->stage_name,
-//                     'lead_count' => $leads->count(),
-//                     'expected_revenue_sum' => $leads->sum(function ($lead) {
-//                         return (float) $lead->expected_revenue;
-//                     }),
-
-//                     'leads' => $leads->values(), // reset index (optional but cleaner)
-//                 ];
-//             });
-//             return response()->json([
-//                 'message' => 'Lead pipeline stages fetched successfully.',
-//                 'data' => [
-//                     'default' => $defaultData,
-//                     'stages' => $stageData
-//                 ],
-//             ]);
-
-// }
-
+    return response()->json([
+        'message' => 'Lead stage updated successfully.',
+        'data'    => [
+            'id'                     => $lead->id,
+            'lead_pipeline_stage_id' => $lead->lead_pipeline_stage_id,
+        ],
+    ]);
+}
 
 
 

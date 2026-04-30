@@ -476,9 +476,11 @@ Route::middleware('auth:api')->group(function (): void {
     });
 
     Route::prefix('user-mappings')->group(function () {
+        Route::get('/with-backoffices', [SettingController::class, 'getByBusinessEntity']);
         Route::post('/clients/by-business-entity', [UserMappingController::class, 'getClientsByBusinessEntity']);
         Route::get('/divisions', [UserMappingController::class, 'getDivisions']);
         Route::post('/store', [UserMappingController::class, 'storeUserMappings']);
         Route::get('/{userId}', [UserMappingController::class, 'getUserMappings']);
+        
     });
 });

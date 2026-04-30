@@ -10,11 +10,11 @@ return new class extends Migration
     {
         Schema::create('backoffice_user_mapping', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('backoffice_id')->constrained('backoffice')->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->unsignedBigInteger('backoffice_id');
+            $table->unsignedBigInteger('user_id');
             $table->timestamps();
 
-            $table->unique(['backoffice_id', 'user_id']);
+            // $table->unique(['backoffice_id', 'user_id']);
         });
     }
 

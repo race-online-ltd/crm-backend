@@ -16,6 +16,9 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class SettingController extends Controller
 {
@@ -297,4 +300,91 @@ class SettingController extends Controller
                 ->values(),
         ];
     }
+
+
+    public function getByBusinessEntity(Request $request)
+    {
+        try {
+            $businessEntityIds = $request->query('business_entity_id');
+
+            if (!$businessEntityIds) {
+                return response()->json(['status' => 'success', 'data' => []]);
+            }
+
+            // Handle both single ID and comma-separated IDs
+            $idsArray = is_array($businessEntityIds) 
+                ? $businessEntityIds 
+                : explode(',', $businessEntityIds);
+
+            // Clean the array (remove whitespace or empty values)
+            $idsArray = array_filter(array_map('trim', $idsArray));
+
+            $data = DB::table('backoffice')
+                ->select('id', 'backoffice_name')
+                ->whereIn('business_entity_id', $idsArray)
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $data
+            ]);
+        } catch (\Exception $e) {
+            // Log the error so you can see the REAL issue in storage/logs/laravel.log
+            Log::error("Backoffice Error: " . $e->getMessage());
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage() // This will now show the actual SQL error
+            ], 500);
+        }
+    }
+
+
+    // public function getByBusinessEntity(Request $request)
+    // {
+    //     try {
+
+    //     // return 'here';
+    //         $businessEntityIds = $request->query('business_entity_id');
+
+    //         if (!$businessEntityIds) {
+    //             return response()->json(['status' => 'success', 'data' => []]);
+    //         }
+
+    //         // Handle both single ID and comma-separated IDs
+    //         $idsArray = is_array($businessEntityIds) 
+    //             ? $businessEntityIds 
+    //             : explode(',', $businessEntityIds);
+
+    //         // Clean the array (remove whitespace or empty values)
+    //         $idsArray = array_filter(array_map('trim', $idsArray));
+
+    //         // If no valid IDs after cleaning
+    //         if (empty($idsArray)) {
+    //             return response()->json(['status' => 'success', 'data' => []]);
+    //         }
+
+    //         // Convert array to comma-separated string for raw query
+    //         $idsString = implode(',', array_map('intval', $idsArray));
+            
+    //         // Raw SQL query
+    //         $data = DB::select("
+    //             SELECT bo.id, bo.backoffice_name 
+    //             FROM backoffice bo
+    //             WHERE bo.business_entity_id IN ({$idsString})
+    //         ");
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'data' => $data
+    //         ]);
+    //     } catch (\Exception $e) {
+    //         Log::error("Backoffice Error: " . $e->getMessage());
+
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
 }

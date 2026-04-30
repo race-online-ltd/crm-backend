@@ -13,6 +13,7 @@ use App\Models\TaskNoteAttachment;
 use App\Models\TaskReminderChannel;
 use App\Models\TaskType;
 use App\Models\Team;
+use App\Models\Source;
 use App\Models\UserDefaultMapping;
 use App\Models\UserGroupMapping;
 use App\Models\UserTeamMapping;
@@ -62,6 +63,15 @@ class TaskController extends Controller
             ])
             ->values();
 
+        $sources = Source::query()
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Source $source) => [
+                'id' => (string) $source->id,
+                'label' => $source->name,
+            ])
+            ->values();
+
         $users = User::query()
             ->with('role:id,name')
             ->where('status', true)
@@ -82,6 +92,7 @@ class TaskController extends Controller
                 'leads' => $leads,
                 'clients' => $clients,
                 'task_types' => $taskTypes,
+                'sources' => $sources,
                 'users' => $users,
                 'reminder_channels' => [
                     ['id' => 'google_calendar', 'label' => 'Google Calendar'],
@@ -231,6 +242,8 @@ class TaskController extends Controller
             $task = Task::create([
                 'lead_id' => $validated['lead_id'] ?? null,
                 'client_id' => $validated['client_id'] ?? null,
+                'source_id' => $validated['source_id'] ?? null,
+                'source_info' => $validated['source_info'] ?? null,
                 'assigned_to_user_id' => $validated['assigned_to_user_id'] ?? null,
                 'created_by_user_id' => $request->user()?->id,
                 'assignment_mode' => $validated['assignment_mode'] ?? 'self',
@@ -278,6 +291,8 @@ class TaskController extends Controller
             $task->update([
                 'lead_id' => $validated['lead_id'] ?? null,
                 'client_id' => $validated['client_id'] ?? null,
+                'source_id' => $validated['source_id'] ?? null,
+                'source_info' => $validated['source_info'] ?? null,
                 'assigned_to_user_id' => $validated['assigned_to_user_id'] ?? null,
                 'assignment_mode' => $validated['assignment_mode'] ?? 'self',
                 'status' => $task->status,
@@ -451,6 +466,8 @@ class TaskController extends Controller
         $validated = validator($payload, [
             'lead_id' => ['nullable', 'integer', Rule::exists('leads', 'id')],
             'client_id' => ['nullable', 'integer', Rule::exists('clients', 'id')],
+            'source_id' => ['nullable', 'integer', Rule::exists('sources', 'id')],
+            'source_info' => ['nullable', 'string'],
             'assigned_to_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'assignment_mode' => ['nullable', Rule::in(['self', 'manual', 'delegated'])],
             'task_type_id' => ['required', 'integer', Rule::exists('task_types', 'id')],
@@ -477,6 +494,12 @@ class TaskController extends Controller
         if (! ($validated['lead_id'] ?? null) && ! ($validated['client_id'] ?? null)) {
             throw ValidationException::withMessages([
                 'lead_id' => 'Either a lead or a client must be selected.',
+            ]);
+        }
+
+        if (($validated['client_id'] ?? null) && !($validated['source_id'] ?? null)) {
+            throw ValidationException::withMessages([
+                'source_id' => 'Source is required for client based tasks.',
             ]);
         }
 
@@ -510,6 +533,10 @@ class TaskController extends Controller
         return [
             'lead_id' => isset($payload['lead_id']) ? (int) $payload['lead_id'] : null,
             'client_id' => isset($payload['client_id']) ? (int) $payload['client_id'] : null,
+            'source_id' => isset($payload['source_id']) && $payload['source_id'] !== '' ? (int) $payload['source_id'] : null,
+            'source_info' => isset($payload['source_info']) && $payload['source_info'] !== ''
+                ? trim((string) $payload['source_info'])
+                : null,
             'assigned_to_user_id' => isset($payload['assigned_to_user_id']) ? (int) $payload['assigned_to_user_id'] : null,
             'assignment_mode' => $payload['assignment_mode'] ?? 'self',
             'task_type_id' => (int) ($payload['task_type_id'] ?? 0),
@@ -617,6 +644,7 @@ class TaskController extends Controller
             'lead.kam:id,full_name,user_name',
             'client:id,client_name,business_entity_id',
             'client.businessEntity:id,name',
+            'source:id,name',
             'assignedToUser:id,full_name,user_name',
             'creator:id,full_name,user_name',
             'taskType:id,name',
@@ -640,6 +668,9 @@ class TaskController extends Controller
             'business_entity_name' => $task->lead?->businessEntity?->name ?? $task->client?->businessEntity?->name,
             'client_id' => $task->client_id,
             'client' => $task->client?->client_name,
+            'source_id' => $task->source_id,
+            'source' => $task->source?->name,
+            'source_info' => $task->source_info,
             'kam_id' => $task->lead?->kam_id,
             'kam_name' => $task->lead?->kam?->full_name ?? $task->lead?->kam?->user_name,
             'assigned_to_user_id' => $task->assigned_to_user_id,

@@ -11,6 +11,7 @@ use App\Models\UserTeamMapping;
 use App\Models\UserGroupMapping;
 use App\Models\UserDivisionMapping;
 use App\Models\User;
+use App\Models\UserBackofficeMapping;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
@@ -75,6 +76,9 @@ class UserMappingController extends Controller
                 'mapping.divisions.ids' => 'nullable|array',
                 'mapping.divisions.ids.*' => 'integer|exists:divisions,id',
                 'mapping.divisions.defaultId' => 'nullable|integer|exists:divisions,id',
+                'mapping.backofficeIds' => 'nullable|array',
+                'mapping.backofficeIds.*' => 'integer|exists:backoffice,id',
+
             ]);
 
             $userId = $validated['userId'];
@@ -114,6 +118,12 @@ class UserMappingController extends Controller
             if (isset($mapping['divisions'])) {
                 $this->storeDivisionMappings($userId, $mapping['divisions']);
             }
+
+            // 6. Store backoffice mappings (NEW)
+            if (isset($mapping['backofficeIds']) && is_array($mapping['backofficeIds'])) {
+                $this->storeBackofficeMappings($userId, $mapping['backofficeIds']);
+            }
+
 
             DB::commit();
 
@@ -252,6 +262,28 @@ class UserMappingController extends Controller
         }
     }
 
+
+    private function storeBackofficeMappings($userId, $backofficeIds)
+    {
+        // Delete existing mappings for this user
+        UserBackofficeMapping::where('user_id', $userId)->delete();
+ 
+        // Create new mappings for each backoffice
+        if (!empty($backofficeIds)) {
+            $mappings = array_map(function ($backofficeId) use ($userId) {
+                return [
+                    'user_id' => $userId,
+                    'backoffice_id' => $backofficeId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }, $backofficeIds);
+ 
+            UserBackofficeMapping::insert($mappings);
+        }
+    }
+
+
     
     public function getUserMappings($userId)
     {
@@ -348,5 +380,69 @@ class UserMappingController extends Controller
             ->pluck('division_id')
             ->toArray();
     }
+
+
+    // public function getByBusinessEntity(Request $request)
+    // {
+    //     try {
+    //         // Accept single or multiple IDs
+    //         $businessEntityIds = $request->input('business_entity_id');
+
+    //         // Convert to array if single value
+    //         if (!is_array($businessEntityIds)) {
+    //             $businessEntityIds = [$businessEntityIds];
+    //         }
+
+    //         $data = DB::table('backoffice as bo')
+    //             ->select('bo.id', 'bo.backoffice_name')
+    //             ->whereIn('bo.business_entity_id', $businessEntityIds)
+    //             ->get();
+
+    //         return response()->json([
+    //             'status' => 'success',
+    //             'data' => $data
+    //         ]);
+
+    //     } catch (\Exception $e) {
+    //         return response()->json([
+    //             'status' => 'error',
+    //             'message' => $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+
+
+
+
+//     public function getByBusinessEntity(Request $request)
+// {
+//     try {
+//         // Use $request->query() specifically for GET parameters
+//         $businessEntityIds = $request->query('business_entity_id');
+
+//         if (empty($businessEntityIds)) {
+//             return response()->json(['status' => 'success', 'data' => []]);
+//         }
+
+//         // Ensure it's an array for whereIn
+//         $idsArray = is_array($businessEntityIds) ? $businessEntityIds : explode(',', $businessEntityIds);
+
+//         $data = DB::table('backoffice')
+//             ->select('id', 'backoffice_name')
+//             ->whereIn('business_entity_id', $idsArray)
+//             ->get();
+
+//         return response()->json([
+//             'status' => 'success',
+//             'data' => $data
+//         ]);
+//     } catch (\Exception $e) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => "Failed to get user mappings: " . $e->getMessage()
+//         ], 500);
+//     }
+// }
 
 }

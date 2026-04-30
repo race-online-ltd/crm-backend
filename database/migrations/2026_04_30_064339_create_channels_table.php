@@ -6,18 +6,23 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Run the migrations.
+     */
     public function up(): void
     {
-        Schema::create('backoffice', function (Blueprint $table) {
+        Schema::create('channels', function (Blueprint $table) {
             $table->id();
-            $table->string('backoffice_name');
-            $table->foreignId('business_entity_id')->constrained('business_entities')->cascadeOnDelete();
+            $table->string('channel_name')->unique();
             $table->timestamps();
         });
     }
 
+    /**
+     * Reverse the migrations.
+     */
     public function down(): void
     {
-        Schema::dropIfExists('backoffice');
+        Schema::dropIfExists('channels');
     }
 };

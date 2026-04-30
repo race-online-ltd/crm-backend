@@ -23,6 +23,7 @@ use App\Http\Controllers\LeadController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\NavigationItemController;
 use App\Http\Controllers\UserMappingController;
+use App\Http\Controllers\ChannelController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Artisan;
 use Webklex\IMAP\Facades\Client;
@@ -483,4 +484,6 @@ Route::middleware('auth:api')->group(function (): void {
         Route::get('/{userId}', [UserMappingController::class, 'getUserMappings']);
         
     });
+
+    Route::get('/channels', [ChannelController::class, 'index']);
 });

@@ -12,6 +12,7 @@ use App\Models\UserGroupMapping;
 use App\Models\UserDivisionMapping;
 use App\Models\User;
 use App\Models\UserBackofficeMapping;
+use App\Models\UserChannelMapping;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
@@ -49,6 +50,112 @@ class UserMappingController extends Controller
 
 
 
+    // public function storeUserMappings(Request $request)
+    // {
+    //     try {
+    //         $validated = $request->validate([
+    //             'userId' => 'nullable|integer|exists:users,id',
+    //             'mapping' => 'required|array',
+    //             'mapping.entityKamBindings' => 'required|array',
+    //             'mapping.entityKamBindings.*.entityId' => 'nullable|integer|exists:business_entities,id',
+    //             'mapping.entityKamBindings.*.kamIds' => 'nullable|array',
+    //             'mapping.entityKamBindings.*.kamIds.*' => 'integer|exists:clients,id', // Change from users to clients
+    //             'mapping.defaultEntityId' => 'nullable|integer|exists:business_entities,id',
+    //             'mapping.defaultKamId' => 'nullable|integer|exists:clients,id', // Change from users to clients
+    //             'mapping.teams' => 'nullable|array',
+    //             'mapping.teams.selectAll' => 'boolean',
+    //             'mapping.teams.ids' => 'nullable|array',
+    //             'mapping.teams.ids.*' => 'integer|exists:teams,id',
+    //             'mapping.teams.defaultId' => 'nullable|integer|exists:teams,id',
+    //             'mapping.groups' => 'nullable|array',
+    //             'mapping.groups.selectAll' => 'boolean',
+    //             'mapping.groups.ids' => 'nullable|array',
+    //             'mapping.groups.ids.*' => 'integer|exists:groups,id',
+    //             'mapping.groups.defaultId' => 'nullable|integer|exists:groups,id',
+    //             'mapping.divisions' => 'nullable|array',
+    //             'mapping.divisions.selectAll' => 'boolean',
+    //             'mapping.divisions.ids' => 'nullable|array',
+    //             'mapping.divisions.ids.*' => 'integer|exists:divisions,id',
+    //             'mapping.divisions.defaultId' => 'nullable|integer|exists:divisions,id',
+    //             'mapping.backofficeIds' => 'nullable|array',
+    //             'mapping.backofficeIds.*' => 'integer|exists:backoffice,id',
+
+    //         ]);
+
+    //         $userId = $validated['userId'];
+    //         $mapping = $validated['mapping'];
+
+    //         // If no user ID provided, try to get from authenticated user
+    //         if (!$userId) {
+    //             $userId = auth()->id();
+    //         }
+
+    //         if (!$userId) {
+    //             return response()->json([
+    //                 'success' => false,
+    //                 'message' => 'User ID is required'
+    //             ], 400);
+    //         }
+
+    //         DB::beginTransaction();
+
+    //         // 1. Store Business Entity - Client mappings
+    //         $this->storeBusinessEntityMappings($userId, $mapping['entityKamBindings']);
+
+    //         // 2. Store default mappings
+    //         $this->storeDefaultMappings($userId, $mapping);
+
+    //         // 3. Store team mappings
+    //         if (isset($mapping['teams'])) {
+    //             $this->storeTeamMappings($userId, $mapping['teams']);
+    //         }
+
+    //         // 4. Store group mappings
+    //         if (isset($mapping['groups'])) {
+    //             $this->storeGroupMappings($userId, $mapping['groups']);
+    //         }
+
+    //         // 5. Store division mappings
+    //         if (isset($mapping['divisions'])) {
+    //             $this->storeDivisionMappings($userId, $mapping['divisions']);
+    //         }
+
+    //         // 6. Store backoffice mappings (NEW)
+    //         if (isset($mapping['backofficeIds']) && is_array($mapping['backofficeIds'])) {
+    //             $this->storeBackofficeMappings($userId, $mapping['backofficeIds']);
+    //         }
+
+
+    //         DB::commit();
+
+    //         return response()->json([
+    //             'success' => true,
+    //             'message' => 'User mappings saved successfully',
+    //             'data' => [
+    //                 'user_id' => $userId
+    //             ]
+    //         ], 200);
+
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Validation failed',
+    //             'errors' => $e->errors()
+    //         ], 422);
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         Log::error('Failed to store user mappings: ' . $e->getMessage(), [
+    //             'trace' => $e->getTraceAsString()
+    //         ]);
+
+    //         return response()->json([
+    //             'success' => false,
+    //             'message' => 'Failed to save user mappings: ' . $e->getMessage()
+    //         ], 500);
+    //     }
+    // }
+
+
     public function storeUserMappings(Request $request)
     {
         try {
@@ -58,9 +165,9 @@ class UserMappingController extends Controller
                 'mapping.entityKamBindings' => 'required|array',
                 'mapping.entityKamBindings.*.entityId' => 'nullable|integer|exists:business_entities,id',
                 'mapping.entityKamBindings.*.kamIds' => 'nullable|array',
-                'mapping.entityKamBindings.*.kamIds.*' => 'integer|exists:clients,id', // Change from users to clients
+                'mapping.entityKamBindings.*.kamIds.*' => 'integer|exists:clients,id',
                 'mapping.defaultEntityId' => 'nullable|integer|exists:business_entities,id',
-                'mapping.defaultKamId' => 'nullable|integer|exists:clients,id', // Change from users to clients
+                'mapping.defaultKamId' => 'nullable|integer|exists:clients,id',
                 'mapping.teams' => 'nullable|array',
                 'mapping.teams.selectAll' => 'boolean',
                 'mapping.teams.ids' => 'nullable|array',
@@ -76,9 +183,14 @@ class UserMappingController extends Controller
                 'mapping.divisions.ids' => 'nullable|array',
                 'mapping.divisions.ids.*' => 'integer|exists:divisions,id',
                 'mapping.divisions.defaultId' => 'nullable|integer|exists:divisions,id',
-                'mapping.backofficeIds' => 'nullable|array',
-                'mapping.backofficeIds.*' => 'integer|exists:backoffice,id',
-
+                'mapping.backoffices' => 'nullable|array',
+                'mapping.backoffices.selectAll' => 'boolean',
+                'mapping.backoffices.ids' => 'nullable|array',
+                'mapping.backoffices.ids.*' => 'integer|exists:backoffice,id',
+                'mapping.socials' => 'nullable|array',
+                'mapping.socials.selectAll' => 'boolean',
+                'mapping.socials.ids' => 'nullable|array',
+                'mapping.socials.ids.*' => 'integer|exists:channels,id',
             ]);
 
             $userId = $validated['userId'];
@@ -101,7 +213,7 @@ class UserMappingController extends Controller
             // 1. Store Business Entity - Client mappings
             $this->storeBusinessEntityMappings($userId, $mapping['entityKamBindings']);
 
-            // 2. Store default mappings
+            // 2. Store default mappings (only for entity, kam, team, group, division)
             $this->storeDefaultMappings($userId, $mapping);
 
             // 3. Store team mappings
@@ -119,11 +231,15 @@ class UserMappingController extends Controller
                 $this->storeDivisionMappings($userId, $mapping['divisions']);
             }
 
-            // 6. Store backoffice mappings (NEW)
-            if (isset($mapping['backofficeIds']) && is_array($mapping['backofficeIds'])) {
-                $this->storeBackofficeMappings($userId, $mapping['backofficeIds']);
+            // 6. Store backoffice mappings (without default)
+            if (isset($mapping['backoffices'])) {
+                $this->storeBackofficeMappings($userId, $mapping['backoffices']);
             }
 
+            // 7. Store social channel mappings (without default)
+            if (isset($mapping['socials'])) {
+                $this->storeSocialMappings($userId, $mapping['socials']);
+            }
 
             DB::commit();
 
@@ -263,11 +379,69 @@ class UserMappingController extends Controller
     }
 
 
-    private function storeBackofficeMappings($userId, $backofficeIds)
+    // private function storeBackofficeMappings($userId, $backofficeIds)
+    // {
+    //     // Delete existing mappings for this user
+    //     UserBackofficeMapping::where('user_id', $userId)->delete();
+ 
+    //     // Create new mappings for each backoffice
+    //     if (!empty($backofficeIds)) {
+    //         $mappings = array_map(function ($backofficeId) use ($userId) {
+    //             return [
+    //                 'user_id' => $userId,
+    //                 'backoffice_id' => $backofficeId,
+    //                 'created_at' => now(),
+    //                 'updated_at' => now(),
+    //             ];
+    //         }, $backofficeIds);
+ 
+    //         UserBackofficeMapping::insert($mappings);
+    //     }
+    // }
+
+
+    // private function storeSocialMappings($userId, array $socials)
+    // {
+    //     // Delete existing mappings for this user
+    //     UserChannelMapping::where('user_id', $userId)->delete();
+
+    //     // If selectAll is true, get all channel IDs
+    //     if (!empty($socials['selectAll'])) {
+    //         $allChannels = \App\Models\Channel::pluck('id')->toArray();
+    //         $channelIds = $allChannels;
+    //     } else {
+    //         $channelIds = $socials['ids'] ?? [];
+    //     }
+
+    //     // Create new mappings for each channel
+    //     if (!empty($channelIds)) {
+    //         $mappings = array_map(function ($channelId) use ($userId) {
+    //             return [
+    //                 'user_id' => $userId,
+    //                 'channel_id' => $channelId,
+    //                 'created_at' => now(),
+    //                 'updated_at' => now(),
+    //             ];
+    //         }, $channelIds);
+
+    //         UserChannelMapping::insert($mappings);
+    //     }
+    // }
+
+
+    private function storeBackofficeMappings($userId, array $backoffices)
     {
         // Delete existing mappings for this user
         UserBackofficeMapping::where('user_id', $userId)->delete();
- 
+
+        // If selectAll is true, get all backoffice IDs
+        if (!empty($backoffices['selectAll'])) {
+            $allBackoffices = \App\Models\Backoffice::pluck('id')->toArray();
+            $backofficeIds = $allBackoffices;
+        } else {
+            $backofficeIds = $backoffices['ids'] ?? [];
+        }
+
         // Create new mappings for each backoffice
         if (!empty($backofficeIds)) {
             $mappings = array_map(function ($backofficeId) use ($userId) {
@@ -278,8 +452,36 @@ class UserMappingController extends Controller
                     'updated_at' => now(),
                 ];
             }, $backofficeIds);
- 
+
             UserBackofficeMapping::insert($mappings);
+        }
+    }
+
+    private function storeSocialMappings($userId, array $socials)
+    {
+        // Delete existing mappings for this user
+        UserChannelMapping::where('user_id', $userId)->delete();
+
+        // If selectAll is true, get all channel IDs
+        if (!empty($socials['selectAll'])) {
+            $allChannels = \App\Models\Channel::pluck('id')->toArray();
+            $channelIds = $allChannels;
+        } else {
+            $channelIds = $socials['ids'] ?? [];
+        }
+
+        // Create new mappings for each channel
+        if (!empty($channelIds)) {
+            $mappings = array_map(function ($channelId) use ($userId) {
+                return [
+                    'user_id' => $userId,
+                    'channel_id' => $channelId,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }, $channelIds);
+
+            UserChannelMapping::insert($mappings);
         }
     }
 

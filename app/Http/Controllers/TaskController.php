@@ -459,6 +459,24 @@ class TaskController extends Controller
         );
     }
 
+    public function downloadAttachment(TaskAttachment $taskAttachment)
+    {
+        $taskAttachment->loadMissing('task');
+
+        $path = $taskAttachment->file_path;
+        if (! $path || ! Storage::disk('public')->exists($path)) {
+            abort(404);
+        }
+
+        return response()->download(
+            Storage::disk('public')->path($path),
+            $taskAttachment->file_name,
+            array_filter([
+                'Content-Type' => $taskAttachment->mime_type,
+            ]),
+        );
+    }
+
     private function validateTaskRequest(Request $request, ?int $taskId = null): array
     {
         $payload = $this->normalizeTaskPayload($request);
@@ -711,6 +729,7 @@ class TaskController extends Controller
                 'file_path' => $attachment->file_path,
                 'mime_type' => $attachment->mime_type,
                 'file_size' => $attachment->file_size,
+                'download_url' => '/tasks/attachments/'.$attachment->id,
             ])->values()->all() ?? [],
             'notes' => $task->notes?->map(fn (TaskNote $note) => $this->transformTaskNote($note))->values()->all() ?? [],
             'created_at' => $task->created_at,

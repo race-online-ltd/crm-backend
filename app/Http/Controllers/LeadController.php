@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BusinessEntity;
+use App\Models\BusinessEntityUserMapping;
 use App\Models\Client;
 use App\Models\LeadAssign;
 use App\Models\Lead;
@@ -33,9 +34,39 @@ class LeadController extends Controller
     public function options(Request $request): JsonResponse
     {
         $businessEntityId = $request->integer('business_entity_id');
+        $authUserId = (int) ($request->user()?->id ?? 0);
+
+        $mappedRows = $authUserId > 0
+            ? BusinessEntityUserMapping::query()
+                ->where('user_id', $authUserId)
+                ->get(['business_entity_id', 'kam_id'])
+            : collect();
+
+        $mappedBusinessEntityIds = $mappedRows
+            ->pluck('business_entity_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $mappedKamIdsForEntity = $businessEntityId > 0
+            ? $mappedRows
+                ->where('business_entity_id', $businessEntityId)
+                ->pluck('kam_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all()
+            : [];
+
+        $hasBusinessEntityMappings = $mappedBusinessEntityIds !== [];
+        $hasKamMappingsForEntity = $businessEntityId > 0 && $mappedKamIdsForEntity !== [];
 
         $businessEntities = BusinessEntity::query()
             ->where('status', true)
+            ->when($hasBusinessEntityMappings, fn ($query) => $query->whereIn('id', $mappedBusinessEntityIds))
             ->orderBy('name')
             ->get(['id', 'name'])
             ->map(fn (BusinessEntity $businessEntity) => [
@@ -89,9 +120,9 @@ class LeadController extends Controller
             ->values();
 
         $kamUsers = User::query()
-            ->join('kam_targets', 'kam_targets.kam_id', '=', 'users.id')
-            ->when($businessEntityId > 0, fn ($query) => $query->where('kam_targets.business_entity_id', $businessEntityId))
             ->where('users.status', true)
+            ->when($hasKamMappingsForEntity, fn ($query) => $query->whereIn('users.id', $mappedKamIdsForEntity))
+            ->when($businessEntityId > 0 && ! $hasKamMappingsForEntity && $hasBusinessEntityMappings, fn ($query) => $query->whereRaw('1 = 0'))
             ->select('users.id', 'users.full_name', 'users.user_name')
             ->distinct()
             ->orderBy('users.full_name')
@@ -187,7 +218,7 @@ class LeadController extends Controller
         $lead = DB::transaction(function () use ($validated, $attachments, $request): Lead {
             $lead = Lead::create($this->buildLeadAttributes($validated, $request));
 
-            $lead->products()->sync($validated['product_ids']);
+            $lead->products()->sync($this->buildLeadProductSyncData($validated));
             $this->storeAttachments($lead, $attachments);
 
             return $lead->load($this->leadRelations());
@@ -216,7 +247,7 @@ class LeadController extends Controller
         $lead = DB::transaction(function () use ($lead, $validated, $attachments, $request): Lead {
             $lead->update($this->buildLeadAttributes($validated, $request, true));
 
-            $lead->products()->sync($validated['product_ids']);
+            $lead->products()->sync($this->buildLeadProductSyncData($validated));
             $this->storeAttachments($lead, $attachments, true);
 
             return $lead->load($this->leadRelations());
@@ -256,6 +287,8 @@ class LeadController extends Controller
             ],
             'product_ids' => ['required', 'array', 'min:1'],
             'product_ids.*' => ['required', 'integer', 'distinct', Rule::exists('product', 'id')],
+            'product_names' => ['nullable', 'array'],
+            'product_names.*' => ['nullable', 'string'],
             'expected_revenue' => ['nullable', 'numeric', 'min:0'],
             'deadline' => ['nullable', 'date'],
             'attachments' => ['nullable', 'array'],
@@ -346,7 +379,7 @@ class LeadController extends Controller
     {
         $payload = $request->all();
 
-        foreach (['product_ids', 'attachments'] as $key) {
+        foreach (['product_ids', 'product_names', 'attachments'] as $key) {
             if (is_string($payload[$key] ?? null)) {
                 $decoded = json_decode($payload[$key], true);
                 if (json_last_error() === JSON_ERROR_NONE) {
@@ -398,6 +431,10 @@ class LeadController extends Controller
             'client_id' => (int) ($payload['client_id'] ?? 0),
             'lead_pipeline_stage_id' => (int) ($payload['lead_pipeline_stage_id'] ?? 0),
             'product_ids' => array_values(array_filter(array_map('intval', (array) ($payload['product_ids'] ?? [])))),
+            'product_names' => array_values(array_map(
+                static fn ($value) => trim((string) $value),
+                array_filter((array) ($payload['product_names'] ?? []), static fn ($value) => $value !== null && $value !== '')
+            )),
             'expected_revenue' => isset($payload['expected_revenue']) && $payload['expected_revenue'] !== ''
                 ? $payload['expected_revenue']
                 : null,
@@ -434,6 +471,26 @@ class LeadController extends Controller
                 'file_size' => $file->getSize(),
             ]);
         }
+    }
+
+    private function buildLeadProductSyncData(array $validated): array
+    {
+        $productIds = array_values($validated['product_ids'] ?? []);
+        $productNames = array_values($validated['product_names'] ?? []);
+
+        $fallbackNames = Product::query()
+            ->whereIn('id', $productIds)
+            ->pluck('product_name', 'id');
+
+        $syncData = [];
+
+        foreach ($productIds as $index => $productId) {
+            $syncData[$productId] = [
+                'product_name' => $productNames[$index] ?? $fallbackNames[$productId] ?? null,
+            ];
+        }
+
+        return $syncData;
     }
 
     private function leadRelations(): array

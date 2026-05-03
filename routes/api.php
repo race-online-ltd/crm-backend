@@ -467,6 +467,7 @@ Route::middleware('auth:api')->group(function (): void {
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{task}', 'show');
+        Route::get('/attachments/{taskAttachment}', 'downloadAttachment');
         Route::get('/note-attachments/{taskNoteAttachment}', 'downloadNoteAttachment');
         Route::put('/{task}', 'update');
         Route::patch('/{task}', 'update');

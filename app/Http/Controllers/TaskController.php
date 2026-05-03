@@ -33,12 +33,12 @@ class TaskController extends Controller
     public function options(): JsonResponse
     {
         $leads = Lead::query()
-            ->with(['client:id,client_name', 'businessEntity:id,name'])
+            ->with(['client:id,client_name', 'products:id,product_name'])
             ->latest()
             ->get()
             ->map(fn (Lead $lead) => [
                 'id' => (string) $lead->id,
-                'label' => trim(($lead->client?->client_name ?? 'Lead').' - '.($lead->businessEntity?->name ?? 'No Entity')),
+                'label' => trim(($lead->client?->client_name ?? 'Lead').' - '.$this->formatProductLabel($lead)),
                 'client_id' => $lead->client_id,
                 'lead_pipeline_stage_id' => $lead->lead_pipeline_stage_id,
             ])
@@ -459,6 +459,24 @@ class TaskController extends Controller
         );
     }
 
+    public function downloadAttachment(TaskAttachment $taskAttachment)
+    {
+        $taskAttachment->loadMissing('task');
+
+        $path = $taskAttachment->file_path;
+        if (! $path || ! Storage::disk('public')->exists($path)) {
+            abort(404);
+        }
+
+        return response()->download(
+            Storage::disk('public')->path($path),
+            $taskAttachment->file_name,
+            array_filter([
+                'Content-Type' => $taskAttachment->mime_type,
+            ]),
+        );
+    }
+
     private function validateTaskRequest(Request $request, ?int $taskId = null): array
     {
         $payload = $this->normalizeTaskPayload($request);
@@ -711,6 +729,7 @@ class TaskController extends Controller
                 'file_path' => $attachment->file_path,
                 'mime_type' => $attachment->mime_type,
                 'file_size' => $attachment->file_size,
+                'download_url' => '/tasks/attachments/'.$attachment->id,
             ])->values()->all() ?? [],
             'notes' => $task->notes?->map(fn (TaskNote $note) => $this->transformTaskNote($note))->values()->all() ?? [],
             'created_at' => $task->created_at,
@@ -1121,6 +1140,22 @@ class TaskController extends Controller
             ->filter(static fn (int $value) => $value > 0)
             ->values()
             ->all();
+    }
+
+    private function formatProductLabel(Lead $lead): string
+    {
+        $products = $lead->products;
+
+        if ($products->isEmpty()) {
+            return 'No Product';
+        }
+
+        $first = $products->first()->product_name;
+        $count = $products->count();
+
+        return $count > 1
+            ? "{$first} +".($count - 1)
+            : $first;
     }
 
     private function calculateDistanceMeters(float $lat1, float $lon1, float $lat2, float $lon2): float

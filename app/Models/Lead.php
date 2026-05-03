@@ -96,6 +96,7 @@ class Lead extends Model
     public function products(): BelongsToMany
     {
         return $this->belongsToMany(Product::class, 'lead_products', 'lead_id', 'product_id')
+            ->withPivot('product_name')
             ->withTimestamps();
     }
 

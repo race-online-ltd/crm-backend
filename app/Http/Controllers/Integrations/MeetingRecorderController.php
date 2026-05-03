@@ -13,7 +13,7 @@ class MeetingRecorderController extends Controller
     {
         $validated = $request->validate([
             'task.id' => ['nullable', 'string', 'max:255'],
-            'task.taskType' => ['required', 'string', 'in:virtual_meeting'],
+            'task.taskType' => ['required', 'string', 'in:virtual_meeting,physical_meeting'],
             'task.title' => ['nullable', 'string', 'max:255'],
             'task.lead' => ['nullable', 'string', 'max:255'],
             'task.client' => ['nullable', 'string', 'max:255'],

@@ -15,6 +15,7 @@ class LeadProduct extends Model
     protected $fillable = [
         'lead_id',
         'product_id',
+        'product_name',
     ];
 
     public function lead(): BelongsTo

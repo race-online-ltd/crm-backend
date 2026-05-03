@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\Mailer\Transport;
 use Symfony\Component\Mailer\Mailer;
+use App\Http\Controllers\UserMappingShowController;
 
 
 function extractCleanText(?string $html, ?string $plain): string
@@ -484,6 +485,13 @@ Route::middleware('auth:api')->group(function (): void {
         Route::get('/divisions', [UserMappingController::class, 'getDivisions']);
         Route::post('/store', [UserMappingController::class, 'storeUserMappings']);
         Route::get('/{userId}', [UserMappingController::class, 'getUserMappings']);
-        
+
+    });
+
+
+    Route::prefix('user')->group(function () {
+        Route::get('/nested-mappings', [UserMappingShowController::class, 'getUserNestedMapping']);
+
+
     });
 });
